@@ -179,9 +179,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清空练习记录'),
-        content: const Text(
-          '将删除答题历史、错题本、收藏和统计数据。此操作不可恢复，题库不受影响。',
-        ),
+        content: const Text('将删除答题历史、错题本、收藏和统计数据。此操作不可恢复，题库不受影响。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -199,9 +197,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     await ref.read(databaseProvider).clearPracticeData();
     ref.invalidate(contentStatsProvider);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('练习记录已清空')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('练习记录已清空')));
   }
 
   double _nearestScale(double value) {
@@ -258,10 +256,7 @@ class _SettingTile extends StatelessWidget {
               children: [
                 Text(title, style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+                Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
           ),

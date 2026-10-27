@@ -1,14 +1,115 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/database/app_database.dart';
 import '../../domain/models.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../practice/practice_launcher.dart';
+
+/// 错题本状态卡：复习中/今日到期/已掌握，到期时点击直达错题页。
+class _ReviewCard extends ConsumerWidget {
+  const _ReviewCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final reviews = ref.watch(reviewItemsProvider);
+    return reviews.when(
+      loading: () => const LinearProgressIndicator(minHeight: 2),
+      error: (error, stack) => Text('读取错题本失败：$error'),
+      data: (items) {
+        final now = DateTime.now();
+        final todayEnd = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          23,
+          59,
+          59,
+        ).millisecondsSinceEpoch;
+        final active = items.where((item) => !item.mastered).toList();
+        final due = active
+            .where(
+              (item) =>
+                  item.nextReviewAt == null || item.nextReviewAt! <= todayEnd,
+            )
+            .length;
+        final mastered = items.length - active.length;
+        final total = items.length;
+        final progress = total == 0 ? 0.0 : mastered / total;
+        return InkWell(
+          onTap: due > 0
+              ? () => ref.read(routerProvider).go('/wrong')
+              : null,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            color: AppColors.surface,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    _ReviewNumber('复习中', '${active.length}'),
+                    _ReviewNumber('今日到期', '$due', highlight: due > 0),
+                    _ReviewNumber('已掌握', '$mastered'),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 5,
+                    backgroundColor: AppColors.softFill,
+                    valueColor: const AlwaysStoppedAnimation(AppColors.ink),
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  total == 0
+                      ? '答错的题会自动进入这里，安排复习'
+                      : '掌握进度 $mastered / $total · ${due > 0 ? '有 $due 道今天该复习' : '今天没有到期的复习'}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ReviewNumber extends StatelessWidget {
+  const _ReviewNumber(this.label, this.value, {this.highlight = false});
+
+  final String label;
+  final String value;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              color: highlight ? AppColors.negative : AppColors.ink,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+}
 
 class StatsPage extends ConsumerWidget {
   const StatsPage({super.key});
@@ -38,10 +139,6 @@ class StatsPage extends ConsumerWidget {
               0,
               (sum, item) => sum + item.correctCount,
             );
-            final duration = lastSeven.fold<int>(
-              0,
-              (sum, item) => sum + item.durationMs,
-            );
             final accuracy = answered == 0 ? 0 : correct / answered;
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -54,16 +151,15 @@ class StatsPage extends ConsumerWidget {
                       answered == 0 ? '—' : '${(accuracy * 100).round()}',
                       answered == 0 ? null : '%',
                     ),
-                    MetricItem('投入', '${duration ~/ 60000}', '分钟'),
                   ],
                 ),
-                const SizedBox(height: 22),
-                const SectionHeading(title: '最近练习量'),
-                _DailyBars(items: lastSeven),
               ],
             );
           },
         ),
+        const SizedBox(height: 24),
+        const SectionHeading(title: '错题本'),
+        _ReviewCard(),
         const SizedBox(height: 24),
         const SectionHeading(title: '模块表现'),
         moduleState.when(
@@ -181,82 +277,6 @@ class StatsPage extends ConsumerWidget {
       title: '$module · 定向练习',
       questions: questions,
       requestedCount: 10,
-    );
-  }
-}
-
-class _DailyBars extends StatelessWidget {
-  const _DailyBars({required this.items});
-
-  final List<DailyStat> items;
-
-  @override
-  Widget build(BuildContext context) {
-    if (items.isEmpty) {
-      return const SizedBox(
-        height: 76,
-        child: Center(
-          child: Text(
-            '完成练习后显示趋势',
-            style: TextStyle(color: AppColors.muted, fontSize: 12),
-          ),
-        ),
-      );
-    }
-    final maxValue = items.fold<int>(
-      1,
-      (value, item) => max(value, item.answeredCount),
-    );
-    return SizedBox(
-      height: 112,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          for (final item in items)
-            Expanded(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 44),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text(
-                          '${item.answeredCount}',
-                          style: const TextStyle(
-                            color: AppColors.muted,
-                            fontSize: 9,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          width: double.infinity,
-                          height: 54 * (item.answeredCount / maxValue) + 3,
-                          decoration: const BoxDecoration(
-                            color: AppColors.ink,
-                            borderRadius: BorderRadius.vertical(
-                              top: Radius.circular(2),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 7),
-                        Text(
-                          item.day.substring(5),
-                          style: const TextStyle(
-                            color: AppColors.muted,
-                            fontSize: 9,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 }
