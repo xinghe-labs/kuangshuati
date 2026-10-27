@@ -1,10 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../data/content/content_repository.dart';
 import '../data/content/seed_content_repository.dart';
 import '../data/database/app_database.dart';
 import '../domain/models.dart';
+import '../features/content/content_manager.dart';
 import '../features/updates/update_service.dart';
+
+final contentManagerProvider = ChangeNotifierProvider<ContentManager>((ref) {
+  throw UnimplementedError(
+    'Content manager must be initialized by the app root',
+  );
+});
 
 final updateServiceProvider = Provider<UpdateService>((ref) => UpdateService());
 

@@ -40,16 +40,45 @@ class RichContent extends StatelessWidget {
   }
 }
 
-class _AssetImage extends ConsumerWidget {
+class _AssetImage extends ConsumerStatefulWidget {
   const _AssetImage({required this.assetId});
 
   final String assetId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final repository = ref.watch(contentRepositoryProvider);
+  ConsumerState<_AssetImage> createState() => _AssetImageState();
+}
+
+class _AssetImageState extends ConsumerState<_AssetImage> {
+  Future<Uint8List?>? _future;
+  String? _loadedAssetId;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ensureFuture();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AssetImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.assetId != widget.assetId) {
+      _loadedAssetId = null;
+      _ensureFuture();
+    }
+  }
+
+  void _ensureFuture() {
+    if (_loadedAssetId == widget.assetId) return;
+    _loadedAssetId = widget.assetId;
+    final repository = ref.read(contentRepositoryProvider);
+    _future = Future.sync(() => repository.imageBytes(widget.assetId));
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return FutureBuilder<Uint8List?>(
-      future: Future.sync(() => repository.imageBytes(assetId)),
+      future: _future,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const SizedBox(
@@ -83,7 +112,7 @@ class _AssetImage extends ConsumerWidget {
               color: AppColors.softFill,
               padding: const EdgeInsets.all(8),
               child: Image.memory(
-                bytes,
+                snapshot.data!,
                 fit: BoxFit.contain,
                 alignment: Alignment.centerLeft,
                 gaplessPlayback: true,

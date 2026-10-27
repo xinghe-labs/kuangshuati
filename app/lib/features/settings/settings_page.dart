@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../content/content_install_page.dart';
 import '../updates/update_flow.dart';
 
 class SettingsPage extends ConsumerWidget {
@@ -16,6 +17,7 @@ class SettingsPage extends ConsumerWidget {
         ref.watch(revealImmediatelyProvider).value ?? true;
     final showTimer = ref.watch(showTimerProvider).value ?? true;
     final contentStats = ref.watch(contentStatsProvider);
+    final contentManager = ref.watch(contentManagerProvider);
     final database = ref.read(databaseProvider);
 
     return AppPage(
@@ -91,7 +93,14 @@ class SettingsPage extends ConsumerWidget {
                   error: (error, stackTrace) => '题库读取失败',
                 ),
               ),
-              trailing: const _StatePill(label: '已内置'),
+              trailing: _StatePill(
+                label: contentManager.updateAvailable ? '有更新' : '已下载',
+              ),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (context) => const ContentInstallPage(),
+                ),
+              ),
             ),
             const ListTile(
               contentPadding: EdgeInsets.symmetric(horizontal: 14),

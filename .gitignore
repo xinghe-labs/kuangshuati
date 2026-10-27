@@ -2,4 +2,7 @@ NUL
 __pycache__/
 *.pyc
 artifacts/
+.wrangler/
 release/*.apk
+release/*.gz
+release/*.sqlite
