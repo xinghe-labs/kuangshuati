@@ -80,7 +80,7 @@ flutter run
 - 题库内容包独立下载、断点续传和版本切换。
 - 题库公开分发授权和正式 HTTPS 更新源。
 
-Android APK 的签名、发布和自动更新流程见 [release/README.md](release/README.md)。
+Android APK 的签名、发布和自动更新流程见 [release/README.md](release/README.md)。仓库内提供 `.github/workflows/android-release.yml`，推送到 GitHub 后可手动构建并发布带更新清单的 Release。
 
 ## 题库基线
 
