@@ -100,24 +100,30 @@ class HomePage extends ConsumerWidget {
     );
   }
 
-  Future<void> _startSequence(BuildContext context, WidgetRef ref) {
-    final questions = ref.read(contentRepositoryProvider).allQuestions;
-    return launchPractice(
+  Future<void> _startSequence(BuildContext context, WidgetRef ref) async {
+    final questions = await ref
+        .read(contentRepositoryProvider)
+        .sequenceQuestions(limit: 100);
+    if (!context.mounted) return;
+    await launchPractice(
       context,
       ref,
       mode: PracticeMode.sequence,
       title: '顺序练习',
       questions: questions,
+      requestedCount: 100,
     );
   }
 
-  Future<void> _startRandom(BuildContext context, WidgetRef ref) {
-    return launchPractice(
+  Future<void> _startRandom(BuildContext context, WidgetRef ref) async {
+    final questions = await randomQuestions(ref, 10);
+    if (!context.mounted) return;
+    await launchPractice(
       context,
       ref,
       mode: PracticeMode.random,
       title: '随机练习',
-      questions: randomQuestions(ref, 10),
+      questions: questions,
       requestedCount: 10,
     );
   }
@@ -133,12 +139,14 @@ class HomePage extends ConsumerWidget {
         )
         .map((item) => item.questionId);
     if (!context.mounted) return;
+    final questions = await questionsFromIds(ref, dueIds);
+    if (!context.mounted) return;
     await launchPractice(
       context,
       ref,
       mode: PracticeMode.wrong,
       title: '到期错题复习',
-      questions: questionsFromIds(ref, dueIds),
+      questions: questions,
     );
   }
 
@@ -147,11 +155,12 @@ class HomePage extends ConsumerWidget {
     WidgetRef ref,
     Paper paper, {
     bool mock = false,
-  }) {
-    final questions = ref
+  }) async {
+    final questions = await ref
         .read(contentRepositoryProvider)
         .questionsForPaper(paper.id);
-    return launchPractice(
+    if (!context.mounted) return;
+    await launchPractice(
       context,
       ref,
       mode: mock ? PracticeMode.mock : PracticeMode.paper,
@@ -378,24 +387,36 @@ class _RecentPapers extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final papers = ref.read(contentRepositoryProvider).allPapers.take(2);
-    return HairlineList(
-      children: [
-        for (final paper in papers)
-          ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 5,
-            ),
-            title: Text(paper.title),
-            subtitle: Text(
-              '${paper.year} · ${paper.region} · ${paper.paperType}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            trailing: const Icon(Icons.arrow_forward, size: 17),
-            onTap: () => onStartPaper(context, ref, paper),
-          ),
-      ],
+    final papers = ref.watch(recentPapersProvider);
+    return papers.when(
+      loading: () => const _LoadingBlock(label: '正在读取最近试卷'),
+      error: (error, stack) => _ErrorBlock(error: error),
+      data: (items) {
+        if (items.isEmpty) {
+          return const AppEmptyState(
+            title: '题库为空',
+            message: '请先导入离线题库。',
+          );
+        }
+        return HairlineList(
+          children: [
+            for (final paper in items.take(2))
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 5,
+                ),
+                title: Text(paper.title),
+                subtitle: Text(
+                  '${paper.year} · ${paper.region} · ${paper.paperType}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                trailing: const Icon(Icons.arrow_forward, size: 17),
+                onTap: () => onStartPaper(context, ref, paper),
+              ),
+          ],
+        );
+      },
     );
   }
 }

@@ -1,4 +1,3 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:kuangshuati/main.dart';
@@ -19,7 +18,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('completes and resumes a mobile practice flow', (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: KuangshuatiApp()));
+    await tester.pumpWidget(await buildKuangshuatiApp());
     await pumpUntil(tester, find.text('随机开始'));
 
     await tester.tap(find.text('随机开始'));
@@ -64,5 +63,6 @@ void main() {
     await pumpUntil(tester, find.text('偏好立即生效并保存在本机。'));
     expect(find.text('作答后立即显示答案'), findsOneWidget);
     expect(find.text('离线题库'), findsOneWidget);
+    expect(find.text('58890 道题 · 515 份试卷 · 39196 张图片'), findsOneWidget);
   });
 }
