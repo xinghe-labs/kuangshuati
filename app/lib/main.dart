@@ -9,6 +9,7 @@ import 'core/theme/app_theme.dart';
 import 'data/content/content_repository.dart';
 import 'data/content/full_content_repository.dart';
 import 'data/content/seed_content_repository.dart';
+import 'data/database/app_database.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,6 +19,7 @@ Future<void> main() async {
 Future<ProviderScope> buildKuangshuatiApp({
   AssetBundle? bundle,
   Directory? supportDirectory,
+  AppDatabase? userDatabase,
 }) async {
   ContentRepository repository;
   try {
@@ -41,6 +43,11 @@ Future<ProviderScope> buildKuangshuatiApp({
         ref.onDispose(repository.close);
         return repository;
       }),
+      if (userDatabase != null)
+        databaseProvider.overrideWith((ref) {
+          ref.onDispose(userDatabase.close);
+          return userDatabase;
+        }),
     ],
     child: const KuangshuatiApp(),
   );

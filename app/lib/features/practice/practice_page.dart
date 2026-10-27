@@ -27,6 +27,7 @@ class _PracticePageState extends ConsumerState<PracticePage>
   final Map<String, int> _questionBaseDurations = {};
   final Map<String, domain.QuestionContent> _questions = {};
   final Set<String> _uncertain = {};
+  final ScrollController _scrollController = ScrollController();
 
   db.PracticeSession? _session;
   List<db.SessionQuestion> _rows = const [];
@@ -51,6 +52,7 @@ class _PracticePageState extends ConsumerState<PracticePage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -133,6 +135,7 @@ class _PracticePageState extends ConsumerState<PracticePage>
           ),
         ),
         body: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 30),
           children: [
             Row(
@@ -447,6 +450,7 @@ class _PracticePageState extends ConsumerState<PracticePage>
       _baseDurationMs = totalDuration;
       _runStartedAt = DateTime.now();
     });
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
     await ref
         .read(databaseProvider)
         .saveProgress(

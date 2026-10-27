@@ -1,3 +1,5 @@
 NUL
 __pycache__/
 *.pyc
+artifacts/
+release/*.apk

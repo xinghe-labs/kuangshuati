@@ -96,7 +96,10 @@ class FullContentRepository implements ContentRepository {
     String path,
   ) async {
     final data = await bundle.load(path);
-    final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    final bytes = data.buffer.asUint8List(
+      data.offsetInBytes,
+      data.lengthInBytes,
+    );
     await output.writeFrom(bytes);
     return bytes.length;
   }

@@ -4,6 +4,9 @@ import '../data/content/content_repository.dart';
 import '../data/content/seed_content_repository.dart';
 import '../data/database/app_database.dart';
 import '../domain/models.dart';
+import '../features/updates/update_service.dart';
+
+final updateServiceProvider = Provider<UpdateService>((ref) => UpdateService());
 
 final databaseProvider = Provider<AppDatabase>((ref) {
   final database = AppDatabase();
