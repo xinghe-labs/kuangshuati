@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
-import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
@@ -11,75 +11,30 @@ import 'content_repository.dart';
 class FullContentRepository implements ContentRepository {
   FullContentRepository._(this._database, this._manifest);
 
-  static const _databaseAsset = 'assets/content/content.sqlite';
-  static const _manifestAsset = 'assets/content/content-manifest.json';
-
   final Database _database;
   final Map<String, dynamic> _manifest;
 
-  static Future<FullContentRepository> open({
-    AssetBundle? bundle,
+  static Future<FullContentRepository> openInstalled({
     Directory? supportDirectory,
   }) async {
-    final assetBundle = bundle ?? rootBundle;
-    final manifestText = await assetBundle.loadString(_manifestAsset);
-    final manifest = jsonDecode(manifestText) as Map<String, dynamic>;
-    final version = manifest['contentVersion']?.toString() ?? 'unknown';
-    final expectedBytes = (manifest['databaseBytes'] as num?)?.toInt() ?? 0;
-
     final support = supportDirectory ?? await getApplicationSupportDirectory();
-    await support.create(recursive: true);
+    final manifestFile = File(
+      '${support.path}${Platform.pathSeparator}content-installed.json',
+    );
     final databaseFile = File(
       '${support.path}${Platform.pathSeparator}content.sqlite',
     );
-    final versionFile = File(
-      '${support.path}${Platform.pathSeparator}content.version',
-    );
-
-    var needsCopy = !await databaseFile.exists();
-    if (!needsCopy) {
-      final installedVersion = await versionFile.exists()
-          ? await versionFile.readAsString()
-          : '';
-      needsCopy =
-          installedVersion.trim() != version ||
-          (expectedBytes > 0 && await databaseFile.length() != expectedBytes);
+    if (!await manifestFile.exists() || !await databaseFile.exists()) {
+      throw StateError('Full content package is not installed');
     }
-
-    if (needsCopy) {
-      final temporary = File('${databaseFile.path}.building');
-      if (await temporary.exists()) await temporary.delete();
-      final output = await temporary.open(mode: FileMode.write);
-      var written = 0;
-      try {
-        final parts = (manifest['databaseParts'] as List<dynamic>?) ?? const [];
-        if (parts.isEmpty) {
-          written += await _writeAsset(output, assetBundle, _databaseAsset);
-        } else {
-          for (final entry in parts) {
-            final part = Map<String, dynamic>.from(entry as Map);
-            final path = part['path']?.toString();
-            if (path == null || path.isEmpty) {
-              throw const FormatException('Content database part has no path');
-            }
-            written += await _writeAsset(output, assetBundle, path);
-          }
-        }
-        await output.flush();
-      } finally {
-        await output.close();
-      }
-      if (expectedBytes > 0 && written != expectedBytes) {
-        await temporary.delete();
-        throw StateError(
-          'Content database size mismatch: expected $expectedBytes, got $written',
-        );
-      }
-      if (await databaseFile.exists()) await databaseFile.delete();
-      await temporary.rename(databaseFile.path);
-      await versionFile.writeAsString(version, flush: true);
+    final manifest =
+        jsonDecode(await manifestFile.readAsString()) as Map<String, dynamic>;
+    final expectedBytes = (manifest['databaseBytes'] as num?)?.toInt() ?? 0;
+    if (expectedBytes > 0 && await databaseFile.length() != expectedBytes) {
+      throw StateError(
+        'Installed content database size does not match manifest',
+      );
     }
-
     final database = sqlite3.open(databaseFile.path, mode: OpenMode.readOnly);
     database.execute('PRAGMA query_only = ON');
     final integrity = database.select('PRAGMA quick_check').first.columnAt(0);
@@ -88,20 +43,6 @@ class FullContentRepository implements ContentRepository {
       throw StateError('Content database integrity check failed: $integrity');
     }
     return FullContentRepository._(database, manifest);
-  }
-
-  static Future<int> _writeAsset(
-    RandomAccessFile output,
-    AssetBundle bundle,
-    String path,
-  ) async {
-    final data = await bundle.load(path);
-    final bytes = data.buffer.asUint8List(
-      data.offsetInBytes,
-      data.lengthInBytes,
-    );
-    await output.writeFrom(bytes);
-    return bytes.length;
   }
 
   static FullContentRepository forTesting(
