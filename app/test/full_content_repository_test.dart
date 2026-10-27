@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kuangshuati/data/content/full_content_repository.dart';
 
@@ -9,15 +8,42 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
-    'assembles the bundled content parts and reads questions and images',
+    'opens an installed full content package and reads questions and images',
     () async {
       final directory = await Directory.systemTemp.createTemp(
         'kuangshuati-content-',
       );
       FullContentRepository? repository;
       try {
-        repository = await FullContentRepository.open(
-          bundle: rootBundle,
+        final assets = _findAssetsDirectory();
+        final parts =
+            Directory(
+                  '${assets.path}${Platform.pathSeparator}content${Platform.pathSeparator}parts',
+                )
+                .listSync()
+                .whereType<File>()
+                .where((file) => file.path.contains('.sqlite.part'))
+                .toList()
+              ..sort((left, right) => left.path.compareTo(right.path));
+        expect(parts, isNotEmpty);
+        final database = File(
+          '${directory.path}${Platform.pathSeparator}content.sqlite',
+        );
+        final output = await database.open(mode: FileMode.write);
+        try {
+          for (final part in parts) {
+            await output.writeFrom(await part.readAsBytes());
+          }
+          await output.flush();
+        } finally {
+          await output.close();
+        }
+        await File(
+          '${assets.path}${Platform.pathSeparator}content${Platform.pathSeparator}content-manifest.json',
+        ).copy(
+          '${directory.path}${Platform.pathSeparator}content-installed.json',
+        );
+        repository = await FullContentRepository.openInstalled(
           supportDirectory: directory,
         );
         final stats = await repository.stats();
@@ -68,5 +94,20 @@ void main() {
       }
     },
     timeout: const Timeout(Duration(minutes: 3)),
+  );
+}
+
+Directory _findAssetsDirectory() {
+  final candidates = [
+    Directory('${Directory.current.path}${Platform.pathSeparator}assets'),
+    Directory(
+      '${Directory.current.path}${Platform.pathSeparator}app${Platform.pathSeparator}assets',
+    ),
+  ];
+  return candidates.firstWhere(
+    (directory) => directory.existsSync(),
+    orElse: () => throw StateError(
+      'Unable to locate app assets from ${Directory.current.path}',
+    ),
   );
 }
