@@ -8,6 +8,7 @@ import '../../data/database/app_database.dart' as db;
 import '../../data/database/session_answer_extensions.dart';
 import '../../domain/models.dart' as domain;
 import '../../shared/widgets/app_widgets.dart';
+import '../../shared/widgets/rich_content.dart';
 import '../practice/practice_launcher.dart';
 
 class ResultPage extends ConsumerStatefulWidget {
@@ -23,6 +24,7 @@ class _ResultPageState extends ConsumerState<ResultPage> {
   db.PracticeSession? _session;
   List<db.SessionQuestion> _rows = const [];
   Map<String, db.SessionAnswer> _answers = const {};
+  Map<String, domain.QuestionContent> _questions = const {};
   bool _loading = true;
   bool _wrongOnly = false;
   Object? _error;
@@ -45,10 +47,9 @@ class _ResultPageState extends ConsumerState<ResultPage> {
       );
     }
     final session = _session!;
-    final repository = ref.read(contentRepositoryProvider);
     final details = [
       for (final row in _rows)
-        if (repository.findQuestion(row.questionId) case final question?)
+        if (_questions[row.questionId] case final question?)
           (
             question: question,
             answer: _answers[row.questionId],
@@ -192,11 +193,15 @@ class _ResultPageState extends ConsumerState<ResultPage> {
       if (session == null) throw StateError('练习记录不存在');
       final rows = await database.sessionQuestionRows(widget.sessionId);
       final answers = await database.answersForSession(widget.sessionId);
+      final questions = await ref
+          .read(contentRepositoryProvider)
+          .questionsByIds(rows.map((row) => row.questionId));
       if (!mounted) return;
       setState(() {
         _session = session;
         _rows = rows;
         _answers = {for (final answer in answers) answer.questionId: answer};
+        _questions = {for (final question in questions) question.id: question};
         _loading = false;
       });
     } catch (error) {
@@ -211,10 +216,7 @@ class _ResultPageState extends ConsumerState<ResultPage> {
   Future<void> _restart() async {
     final session = _session;
     if (session == null) return;
-    final repository = ref.read(contentRepositoryProvider);
-    final questions = [
-      for (final row in _rows) ?repository.findQuestion(row.questionId),
-    ];
+    final questions = [for (final row in _rows) ?_questions[row.questionId]];
     final mode = domain.PracticeMode.values.firstWhere(
       (value) => value.name == session.mode,
       orElse: () => domain.PracticeMode.custom,
@@ -309,7 +311,7 @@ class _ResultQuestion extends StatelessWidget {
           ),
         ),
         title: Text(
-          question.stem,
+          question.plainStem,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: Theme.of(context).textTheme.titleMedium,
@@ -336,7 +338,7 @@ class _ResultQuestion extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               color: AppColors.softFill,
-              child: Text(question.material!),
+              child: RichContent(question.material!),
             ),
             const SizedBox(height: 12),
           ],
@@ -350,7 +352,7 @@ class _ResultQuestion extends StatelessWidget {
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
-            child: Text(
+            child: RichContent(
               question.solution,
               style: Theme.of(context).textTheme.bodyMedium,
             ),

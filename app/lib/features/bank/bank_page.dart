@@ -88,15 +88,17 @@ class _BankPageState extends ConsumerState<BankPage> {
     );
   }
 
-  Future<void> _startPaper(Paper paper, {bool mock = false}) {
-    return launchPractice(
+  Future<void> _startPaper(Paper paper, {bool mock = false}) async {
+    final questions = await ref
+        .read(contentRepositoryProvider)
+        .questionsForPaper(paper.id);
+    if (!mounted) return;
+    await launchPractice(
       context,
       ref,
       mode: mock ? PracticeMode.mock : PracticeMode.paper,
       title: mock ? '${paper.title} · 模考' : paper.title,
-      questions: ref
-          .read(contentRepositoryProvider)
-          .questionsForPaper(paper.id),
+      questions: questions,
       paperId: paper.id,
       revealMode: mock ? RevealMode.afterSubmit : RevealMode.immediate,
       timeLimitSeconds: mock ? paper.durationSeconds : null,
@@ -127,16 +129,32 @@ class _PaperList extends ConsumerWidget {
     final papers = ref
         .read(contentRepositoryProvider)
         .searchPapers(query: query);
-    if (papers.isEmpty) {
-      return const AppEmptyState(title: '没有匹配的试卷', message: '换一个年份、地区或试卷名称试试。');
-    }
-    return Column(
-      children: [
-        for (final paper in papers) ...[
-          _PaperRow(paper: paper, onStart: onStart),
-          const SizedBox(height: 9),
-        ],
-      ],
+    return FutureBuilder<List<Paper>>(
+      future: Future.value(papers),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.all(28),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError) return Text('读取试卷失败：${snapshot.error}');
+        final items = snapshot.data ?? const [];
+        if (items.isEmpty) {
+          return const AppEmptyState(
+            title: '没有匹配的试卷',
+            message: '换一个年份、地区或试卷名称试试。',
+          );
+        }
+        return Column(
+          children: [
+            for (final paper in items) ...[
+              _PaperRow(paper: paper, onStart: onStart),
+              const SizedBox(height: 9),
+            ],
+          ],
+        );
+      },
     );
   }
 }
@@ -218,67 +236,85 @@ class _FavoriteList extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => Text('读取收藏失败：$error'),
       data: (items) {
-        final repository = ref.read(contentRepositoryProvider);
         final normalized = query.trim().toLowerCase();
-        final questions = [
-          for (final item in items)
-            if (repository.findQuestion(item.questionId) case final question?)
-              if (normalized.isEmpty ||
-                  question.stem.toLowerCase().contains(normalized))
-                question,
-        ];
-        if (questions.isEmpty) {
-          return AppEmptyState(
-            title: query.isEmpty ? '还没有收藏题目' : '没有匹配的收藏',
-            message: query.isEmpty ? '做题时点一下书签，题目会出现在这里。' : '换一个题干关键词试试。',
-          );
-        }
-        return Column(
-          children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                onPressed: () => onStart(questions),
-                icon: const Icon(Icons.play_arrow, size: 18),
-                label: Text('练习全部 ${questions.length} 题'),
-              ),
-            ),
-            const SizedBox(height: 10),
-            HairlineList(
+        final loaded = ref
+            .read(contentRepositoryProvider)
+            .questionsByIds(items.map((item) => item.questionId));
+        return FutureBuilder<List<QuestionContent>>(
+          future: Future.value(loaded),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Padding(
+                padding: EdgeInsets.all(28),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            if (snapshot.hasError) {
+              return Text('读取收藏失败：${snapshot.error}');
+            }
+            final questions = (snapshot.data ?? const [])
+                .where(
+                  (question) =>
+                      normalized.isEmpty ||
+                      question.plainStem.toLowerCase().contains(normalized),
+                )
+                .toList(growable: false);
+            if (questions.isEmpty) {
+              return AppEmptyState(
+                title: query.isEmpty ? '还没有收藏题目' : '没有匹配的收藏',
+                message: query.isEmpty
+                    ? '做题时点一下书签，题目会出现在这里。'
+                    : '换一个题干关键词试试。',
+              );
+            }
+            return Column(
               children: [
-                for (final question in questions)
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 7,
-                    ),
-                    title: Text(
-                      question.stem,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 5),
-                      child: Text(
-                        '${question.module} · 第 ${question.questionNo} 题',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                    trailing: IconButton(
-                      tooltip: '取消收藏',
-                      onPressed: () => ref
-                          .read(databaseProvider)
-                          .toggleFavorite(question.id),
-                      icon: const Icon(
-                        Icons.bookmark,
-                        size: 20,
-                        color: AppColors.ink,
-                      ),
-                    ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    onPressed: () => onStart(questions),
+                    icon: const Icon(Icons.play_arrow, size: 18),
+                    label: Text('练习全部 ${questions.length} 题'),
                   ),
+                ),
+                const SizedBox(height: 10),
+                HairlineList(
+                  children: [
+                    for (final question in questions)
+                      ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 7,
+                        ),
+                        title: Text(
+                          question.plainStem,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 5),
+                          child: Text(
+                            '${question.module} · 第 ${question.questionNo} 题',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                        trailing: IconButton(
+                          tooltip: '取消收藏',
+                          onPressed: () => ref
+                              .read(databaseProvider)
+                              .toggleFavorite(question.id),
+                          icon: const Icon(
+                            Icons.bookmark,
+                            size: 20,
+                            color: AppColors.ink,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ],
-            ),
-          ],
+            );
+          },
         );
       },
     );

@@ -1,6 +1,10 @@
-import '../../domain/models.dart';
+import 'dart:math';
+import 'dart:typed_data';
 
-class SeedContentRepository {
+import '../../domain/models.dart';
+import 'content_repository.dart';
+
+class SeedContentRepository implements ContentRepository {
   static const papers = <Paper>[
     Paper(
       id: 'demo-2026-national',
@@ -194,6 +198,7 @@ class SeedContentRepository {
 
   List<QuestionContent> get allQuestions => List.unmodifiable(questions);
 
+  @override
   Paper? findPaper(String id) {
     for (final paper in papers) {
       if (paper.id == id) return paper;
@@ -201,6 +206,7 @@ class SeedContentRepository {
     return null;
   }
 
+  @override
   QuestionContent? findQuestion(String id) {
     for (final question in questions) {
       if (question.id == id) return question;
@@ -208,10 +214,12 @@ class SeedContentRepository {
     return null;
   }
 
+  @override
   List<QuestionContent> questionsForPaper(String paperId) {
     return questions.where((question) => question.paperId == paperId).toList();
   }
 
+  @override
   List<Paper> searchPapers({String query = '', int? year}) {
     final normalized = query.trim().toLowerCase();
     return papers.where((paper) {
@@ -223,4 +231,49 @@ class SeedContentRepository {
       return matchesYear && matchesQuery;
     }).toList();
   }
+
+  @override
+  List<Paper> recentPapers({int limit = 5}) {
+    return [...papers]
+      ..sort((a, b) {
+        final yearOrder = b.year.compareTo(a.year);
+        return yearOrder != 0 ? yearOrder : a.title.compareTo(b.title);
+      })
+      ..take(limit).toList();
+  }
+
+  @override
+  List<QuestionContent> questionsByIds(Iterable<String> ids) {
+    return [for (final id in ids) ?findQuestion(id)];
+  }
+
+  @override
+  List<QuestionContent> randomQuestions(int count, {String? module}) {
+    final pool = questions
+        .where((question) => module == null || question.module == module)
+        .toList();
+    pool.shuffle(Random(42));
+    return pool.take(count).toList(growable: false);
+  }
+
+  @override
+  List<QuestionContent> sequenceQuestions({int limit = 100}) {
+    return questions.take(limit).toList(growable: false);
+  }
+
+  @override
+  Uint8List? imageBytes(String assetId) => null;
+
+  @override
+  ContentStats stats() {
+    return const ContentStats(
+      questionCount: 12,
+      paperCount: 5,
+      imageCount: 0,
+      contentVersion: 'demo',
+    );
+  }
+
+  @override
+  void close() {}
 }

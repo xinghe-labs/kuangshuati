@@ -14,6 +14,7 @@ class SettingsPage extends ConsumerWidget {
     final revealImmediately =
         ref.watch(revealImmediatelyProvider).value ?? true;
     final showTimer = ref.watch(showTimerProvider).value ?? true;
+    final contentStats = ref.watch(contentStatsProvider);
     final database = ref.read(databaseProvider);
 
     return AppPage(
@@ -73,16 +74,25 @@ class SettingsPage extends ConsumerWidget {
         ),
         const SizedBox(height: 18),
         const SectionHeading(title: '本机数据'),
-        const HairlineList(
+        HairlineList(
           children: [
             ListTile(
-              contentPadding: EdgeInsets.symmetric(horizontal: 14),
-              leading: Icon(Icons.offline_bolt_outlined, size: 21),
-              title: Text('离线题库'),
-              subtitle: Text('演示内容 12 题 · 5 份试卷'),
-              trailing: _StatePill(label: '已内置'),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+              leading: const Icon(Icons.offline_bolt_outlined, size: 21),
+              title: const Text('离线题库'),
+              subtitle: Text(
+                contentStats.when(
+                  data: (stats) =>
+                      '${stats.questionCount} 道题 · '
+                      '${stats.paperCount} 份试卷 · '
+                      '${stats.imageCount} 张图片',
+                  loading: () => '正在读取离线题库',
+                  error: (error, stackTrace) => '题库读取失败',
+                ),
+              ),
+              trailing: const _StatePill(label: '已内置'),
             ),
-            ListTile(
+            const ListTile(
               contentPadding: EdgeInsets.symmetric(horizontal: 14),
               leading: Icon(Icons.lock_outline, size: 21),
               title: Text('练习记录'),
@@ -99,7 +109,7 @@ class SettingsPage extends ConsumerWidget {
               title: Text('狂刷题'),
               subtitle: Text('移动端首版 · 本地离线运行'),
               trailing: Text(
-                '0.1.0',
+                '1.0.0',
                 style: TextStyle(color: AppColors.muted, fontSize: 12),
               ),
             ),

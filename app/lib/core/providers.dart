@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/content/content_repository.dart';
 import '../data/content/seed_content_repository.dart';
 import '../data/database/app_database.dart';
+import '../domain/models.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
   final database = AppDatabase();
@@ -9,8 +11,20 @@ final databaseProvider = Provider<AppDatabase>((ref) {
   return database;
 });
 
-final contentRepositoryProvider = Provider<SeedContentRepository>((ref) {
-  return SeedContentRepository();
+final contentRepositoryProvider = Provider<ContentRepository>((ref) {
+  final repository = SeedContentRepository();
+  ref.onDispose(repository.close);
+  return repository;
+});
+
+final contentStatsProvider = FutureProvider<ContentStats>((ref) {
+  return Future.value(ref.watch(contentRepositoryProvider).stats());
+});
+
+final recentPapersProvider = FutureProvider<List<Paper>>((ref) {
+  return Future.value(
+    ref.watch(contentRepositoryProvider).recentPapers(limit: 5),
+  );
 });
 
 final latestActiveSessionProvider = StreamProvider<PracticeSession?>((ref) {

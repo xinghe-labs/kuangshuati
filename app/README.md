@@ -1,17 +1,25 @@
-# kuangshuati
+# 狂刷题 Flutter 客户端
 
-A new Flutter project.
+本地离线的行测刷题应用。内容题库与用户记录分别保存在两个 SQLite 数据库中：内容库只读，用户库保存会话、答案、错题、收藏、笔记和统计。
 
-## Getting Started
+## 运行
 
-This project is a starting point for a Flutter application.
+```bash
+flutter pub get
+flutter run
+```
 
-A few resources to get you started if this is your first Flutter project:
+题库资产位于 `assets/content/`：
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+- `content-manifest.json`：版本、数量、总字节数和分片信息。
+- `parts/content.sqlite.part000` 至 `part018`：最终 SQLite 的 16 MiB 分片。
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 验证
+
+```bash
+flutter analyze
+flutter test
+flutter test integration_test/app_flow_test.dart -d <device-id>
+```
+
+连接 Android 设备后，集成测试会真实验证全量题库加载、随机练习、提交、恢复、继续练习和主页面导航。

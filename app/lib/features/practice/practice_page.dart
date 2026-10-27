@@ -9,6 +9,7 @@ import '../../core/theme/app_theme.dart';
 import '../../data/database/app_database.dart' as db;
 import '../../data/database/session_answer_extensions.dart';
 import '../../domain/models.dart' as domain;
+import '../../shared/widgets/rich_content.dart';
 
 class PracticePage extends ConsumerStatefulWidget {
   const PracticePage({required this.sessionId, super.key});
@@ -24,6 +25,7 @@ class _PracticePageState extends ConsumerState<PracticePage>
   final Map<String, db.SessionAnswer> _answers = {};
   final Map<String, Set<String>> _selected = {};
   final Map<String, int> _questionBaseDurations = {};
+  final Map<String, domain.QuestionContent> _questions = {};
   final Set<String> _uncertain = {};
 
   db.PracticeSession? _session;
@@ -164,12 +166,12 @@ class _PracticePageState extends ConsumerState<PracticePage>
                     left: BorderSide(color: AppColors.ink, width: 3),
                   ),
                 ),
-                child: Text(
+                child: RichContent(
                   question.material!,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
-            Text(
+            RichContent(
               question.stem,
               style: const TextStyle(
                 color: AppColors.ink,
@@ -246,9 +248,7 @@ class _PracticePageState extends ConsumerState<PracticePage>
 
   domain.QuestionContent? get _currentQuestion {
     if (_index < 0 || _index >= _rows.length) return null;
-    return ref
-        .read(contentRepositoryProvider)
-        .findQuestion(_rows[_index].questionId);
+    return _questions[_rows[_index].questionId];
   }
 
   int get _elapsedSessionMs =>
@@ -277,6 +277,12 @@ class _PracticePageState extends ConsumerState<PracticePage>
       }
       final rows = await database.sessionQuestionRows(widget.sessionId);
       final answers = await database.answersForSession(widget.sessionId);
+      final questions = await ref
+          .read(contentRepositoryProvider)
+          .questionsByIds(rows.map((row) => row.questionId));
+      for (final question in questions) {
+        _questions[question.id] = question;
+      }
       for (final answer in answers) {
         _answers[answer.questionId] = answer;
         _selected[answer.questionId] = answer.selected;
@@ -504,15 +510,11 @@ class _PracticePageState extends ConsumerState<PracticePage>
         submitted: _answers[_currentQuestion?.id]?.submitted ?? false,
         isCorrect: _answers[_currentQuestion?.id]?.isCorrect,
       );
-      final questions = {
-        for (final item in ref.read(contentRepositoryProvider).allQuestions)
-          item.id: item,
-      };
       await ref
           .read(databaseProvider)
           .finalizeSession(
             sessionId: widget.sessionId,
-            questionLookup: questions,
+            questionLookup: _questions,
           );
       if (!mounted) return;
       if (automatic) {
@@ -735,7 +737,7 @@ class _OptionTile extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
+                child: RichContent(
                   text,
                   style: const TextStyle(
                     color: AppColors.ink,
@@ -858,7 +860,7 @@ class _AnswerPanel extends StatelessWidget {
           const SizedBox(height: 11),
           Text('解析', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 5),
-          Text(solution, style: Theme.of(context).textTheme.bodyMedium),
+          RichContent(solution, style: Theme.of(context).textTheme.bodyMedium),
         ],
       ),
     );

@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -40,13 +38,24 @@ Future<void> launchPractice(
   if (context.mounted) context.push('/practice/$id');
 }
 
-List<QuestionContent> questionsFromIds(WidgetRef ref, Iterable<String> ids) {
-  final repository = ref.read(contentRepositoryProvider);
-  return [for (final id in ids) ?repository.findQuestion(id)];
+Future<List<QuestionContent>> questionsFromIds(
+  WidgetRef ref,
+  Iterable<String> ids,
+) {
+  return Future.value(
+    ref.read(contentRepositoryProvider).questionsByIds(ids),
+  );
 }
 
-List<QuestionContent> randomQuestions(WidgetRef ref, int count) {
-  final all = [...ref.read(contentRepositoryProvider).allQuestions];
-  all.shuffle(Random.secure());
-  return all.take(count).toList();
+Future<List<QuestionContent>> randomQuestions(
+  WidgetRef ref,
+  int count, {
+  String? module,
+}) {
+  return Future.value(
+    ref.read(contentRepositoryProvider).randomQuestions(
+      count,
+      module: module,
+    ),
+  );
 }

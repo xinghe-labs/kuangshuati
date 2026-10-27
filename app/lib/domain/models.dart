@@ -60,6 +60,7 @@ class QuestionContent {
     required this.correctAnswers,
     required this.solution,
     this.material,
+    this.searchStem,
   });
 
   final String id;
@@ -71,6 +72,13 @@ class QuestionContent {
   final Set<String> correctAnswers;
   final String solution;
   final String? material;
+  final String? searchStem;
+
+  String get plainStem {
+    final indexed = searchStem?.trim();
+    if (indexed != null && indexed.isNotEmpty) return indexed;
+    return stem.replaceAll(RegExp('\ue000[^\ue001]+\ue001'), ' [图片] ');
+  }
 
   bool isCorrect(Iterable<String> selected) {
     final normalized = selected.toSet();

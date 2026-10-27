@@ -123,13 +123,15 @@ class _WrongPageState extends ConsumerState<WrongPage> {
     );
   }
 
-  Future<void> _start(Iterable<String> ids) {
-    return launchPractice(
+  Future<void> _start(Iterable<String> ids) async {
+    final questions = await questionsFromIds(ref, ids);
+    if (!mounted) return;
+    await launchPractice(
       context,
       ref,
       mode: PracticeMode.wrong,
       title: '错题复习',
-      questions: questionsFromIds(ref, ids),
+      questions: questions,
     );
   }
 }
@@ -149,87 +151,99 @@ class _ReviewRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final question = ref
-        .read(contentRepositoryProvider)
-        .findQuestion(item.questionId);
-    if (question == null) return const SizedBox.shrink();
-    final due =
-        item.nextReviewAt != null &&
-        item.nextReviewAt! <= DateTime.now().millisecondsSinceEpoch;
-    return Container(
-      color: AppColors.surface,
-      child: InkWell(
-        onTap: onStart,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+    final future = Future.value(
+      ref.read(contentRepositoryProvider).findQuestion(item.questionId),
+    );
+    return FutureBuilder<QuestionContent?>(
+      future: future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const SizedBox(
+            height: 100,
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final question = snapshot.data;
+        if (question == null) return const SizedBox.shrink();
+        final due =
+            item.nextReviewAt != null &&
+            item.nextReviewAt! <= DateTime.now().millisecondsSinceEpoch;
+        return Container(
+          color: AppColors.surface,
+          child: InkWell(
+            onTap: onStart,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '阶段 ${item.stage + 1} / 5',
-                    style: const TextStyle(
-                      color: AppColors.muted,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 3,
-                    ),
-                    color: due && !item.mastered
-                        ? AppColors.negativeFill
-                        : AppColors.softFill,
-                    child: Text(
-                      item.mastered
-                          ? '已掌握'
-                          : due
-                          ? '今日到期'
-                          : _nextReviewLabel(item.nextReviewAt),
-                      style: TextStyle(
-                        color: due && !item.mastered
-                            ? AppColors.negative
-                            : AppColors.muted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
+                  Row(
+                    children: [
+                      Text(
+                        '阶段 ${item.stage + 1} / 5',
+                        style: const TextStyle(
+                          color: AppColors.muted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
+                        color: due && !item.mastered
+                            ? AppColors.negativeFill
+                            : AppColors.softFill,
+                        child: Text(
+                          item.mastered
+                              ? '已掌握'
+                              : due
+                              ? '今日到期'
+                              : _nextReviewLabel(item.nextReviewAt),
+                          style: TextStyle(
+                            color: due && !item.mastered
+                                ? AppColors.negative
+                                : AppColors.muted,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 9),
-              Text(
-                question.stem,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 9),
-              Row(
-                children: [
+                  const SizedBox(height: 9),
                   Text(
-                    '${question.module} · 错 ${item.wrongCount} 次 · 空 ${item.blankCount} 次',
-                    style: Theme.of(context).textTheme.bodySmall,
+                    question.plainStem,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: () => onMastered(!showMastered),
-                    icon: Icon(
-                      showMastered ? Icons.undo : Icons.check,
-                      size: 16,
-                    ),
-                    label: Text(showMastered ? '恢复复习' : '标记掌握'),
+                  const SizedBox(height: 9),
+                  Row(
+                    children: [
+                      Text(
+                        '${question.module} · 错 ${item.wrongCount} 次 · 空 ${item.blankCount} 次',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: () => onMastered(!showMastered),
+                        icon: Icon(
+                          showMastered ? Icons.undo : Icons.check,
+                          size: 16,
+                        ),
+                        label: Text(showMastered ? '恢复复习' : '标记掌握'),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 

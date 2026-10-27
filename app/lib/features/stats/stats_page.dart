@@ -169,20 +169,18 @@ class StatsPage extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     String module,
-  ) {
-    final questions =
-        ref
-            .read(contentRepositoryProvider)
-            .allQuestions
-            .where((question) => question.module == module)
-            .toList()
-          ..shuffle(Random.secure());
-    return launchPractice(
+  ) async {
+    final questions = await ref
+        .read(contentRepositoryProvider)
+        .randomQuestions(10, module: module);
+    if (!context.mounted) return;
+    await launchPractice(
       context,
       ref,
       mode: PracticeMode.custom,
       title: '$module · 定向练习',
       questions: questions,
+      requestedCount: 10,
     );
   }
 }

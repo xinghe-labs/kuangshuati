@@ -127,13 +127,23 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (migrator, from, to) async {
       if (from < 2) {
         await migrator.addColumn(sessionAnswers, sessionAnswers.uncertain);
+      }
+      if (from < 3) {
+        // Demo question IDs are not part of the imported content database.
+        await customStatement('DELETE FROM session_answers');
+        await customStatement('DELETE FROM session_questions');
+        await customStatement('DELETE FROM practice_sessions');
+        await customStatement('DELETE FROM review_items');
+        await customStatement('DELETE FROM favorites');
+        await customStatement('DELETE FROM daily_stats');
+        await customStatement('DELETE FROM module_stats');
       }
     },
     onCreate: (migrator) async {
