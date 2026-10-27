@@ -12,7 +12,7 @@ void main() {
   HttpOverrides.global = null;
 
   test(
-    'downloads four ranges and installs a verified content package',
+    'downloads multiple ranges and installs a verified content package',
     () async {
       final root = await Directory.systemTemp.createTemp('content-service-');
       final sourceDb = File('${root.path}/source.sqlite');

@@ -210,41 +210,48 @@ class _DailyBars extends StatelessWidget {
     return SizedBox(
       height: 112,
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           for (final item in items)
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${item.answeredCount}',
-                      style: const TextStyle(
-                        color: AppColors.muted,
-                        fontSize: 9,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      height: 54 * (item.answeredCount / maxValue) + 3,
-                      decoration: const BoxDecoration(
-                        color: AppColors.ink,
-                        borderRadius: BorderRadius.vertical(
-                          top: Radius.circular(2),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 44),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${item.answeredCount}',
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 9,
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 4),
+                        Container(
+                          width: double.infinity,
+                          height: 54 * (item.answeredCount / maxValue) + 3,
+                          decoration: const BoxDecoration(
+                            color: AppColors.ink,
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(2),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 7),
+                        Text(
+                          item.day.substring(5),
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 9,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 7),
-                    Text(
-                      item.day.substring(5),
-                      style: const TextStyle(
-                        color: AppColors.muted,
-                        fontSize: 9,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),

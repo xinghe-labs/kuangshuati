@@ -171,6 +171,20 @@ class AppDatabase extends _$AppDatabase {
     },
   );
 
+  /// 清空全部练习记录（答题历史、错题本、收藏、统计），
+  /// 不影响题库、图片和设置。
+  Future<void> clearPracticeData() async {
+    await batch((batch) {
+      batch.deleteWhere(sessionAnswers, (_) => const Constant(true));
+      batch.deleteWhere(sessionQuestions, (_) => const Constant(true));
+      batch.deleteWhere(practiceSessions, (_) => const Constant(true));
+      batch.deleteWhere(reviewItems, (_) => const Constant(true));
+      batch.deleteWhere(favorites, (_) => const Constant(true));
+      batch.deleteWhere(dailyStats, (_) => const Constant(true));
+      batch.deleteWhere(moduleStats, (_) => const Constant(true));
+    });
+  }
+
   Stream<PracticeSession?> watchLatestActiveSession() {
     return (select(practiceSessions)
           ..where((row) => row.status.equals(SessionStatus.active.value))

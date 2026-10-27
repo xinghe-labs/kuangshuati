@@ -147,7 +147,7 @@ class ContentPackageService {
     this.proxy = contentHttpProxy,
     this._supportDirectory,
     this._temporaryDirectory,
-    this.segmentCount = 4,
+    this.segmentCount = 6,
   });
 
   final String manifestUrl;
@@ -423,7 +423,8 @@ class ContentPackageService {
     var attempts = 0;
     while (await file.length() < expected) {
       attempts += 1;
-      final usesProxy = normalizeHttpProxy(proxy) != null && attempts.isOdd;
+      // 前两次尝试优先直连 R2（真机验证直连快）；代理仅在直连失败后启用。
+      final usesProxy = normalizeHttpProxy(proxy) != null && attempts > 2;
       var current = await file.length();
       final requestStart = range.start + current;
       final client = createHttpClient(proxy: usesProxy ? proxy : '');
@@ -435,7 +436,7 @@ class ContentPackageService {
           'bytes=$requestStart-${range.end}',
         );
         final response = await request.close().timeout(
-          const Duration(seconds: 30),
+          const Duration(seconds: 15),
         );
         if (response.statusCode != HttpStatus.partialContent) {
           throw ContentPackageException(
@@ -444,7 +445,7 @@ class ContentPackageService {
         }
         output = await file.open(mode: FileMode.append);
         await for (final chunk in response.timeout(
-          const Duration(seconds: 60),
+          const Duration(seconds: 20),
         )) {
           current += chunk.length;
           if (current > expected) {
