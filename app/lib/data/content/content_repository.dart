@@ -32,10 +32,7 @@ abstract class ContentRepository {
 
   FutureOr<List<QuestionContent>> questionsByIds(Iterable<String> ids);
 
-  FutureOr<List<QuestionContent>> randomQuestions(
-    int count, {
-    String? module,
-  });
+  FutureOr<List<QuestionContent>> randomQuestions(int count, {String? module});
 
   FutureOr<List<QuestionContent>> sequenceQuestions({int limit = 100});
 

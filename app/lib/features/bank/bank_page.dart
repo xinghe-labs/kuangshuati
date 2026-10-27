@@ -262,9 +262,7 @@ class _FavoriteList extends ConsumerWidget {
             if (questions.isEmpty) {
               return AppEmptyState(
                 title: query.isEmpty ? '还没有收藏题目' : '没有匹配的收藏',
-                message: query.isEmpty
-                    ? '做题时点一下书签，题目会出现在这里。'
-                    : '换一个题干关键词试试。',
+                message: query.isEmpty ? '做题时点一下书签，题目会出现在这里。' : '换一个题干关键词试试。',
               );
             }
             return Column(

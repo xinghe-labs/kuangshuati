@@ -111,7 +111,9 @@ class _AssetImage extends ConsumerWidget {
                 child: InteractiveViewer(
                   minScale: 0.7,
                   maxScale: 5,
-                  child: Center(child: Image.memory(bytes, fit: BoxFit.contain)),
+                  child: Center(
+                    child: Image.memory(bytes, fit: BoxFit.contain),
+                  ),
                 ),
               ),
               Positioned(

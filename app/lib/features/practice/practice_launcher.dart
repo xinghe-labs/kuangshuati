@@ -42,9 +42,7 @@ Future<List<QuestionContent>> questionsFromIds(
   WidgetRef ref,
   Iterable<String> ids,
 ) {
-  return Future.value(
-    ref.read(contentRepositoryProvider).questionsByIds(ids),
-  );
+  return Future.value(ref.read(contentRepositoryProvider).questionsByIds(ids));
 }
 
 Future<List<QuestionContent>> randomQuestions(
@@ -53,9 +51,6 @@ Future<List<QuestionContent>> randomQuestions(
   String? module,
 }) {
   return Future.value(
-    ref.read(contentRepositoryProvider).randomQuestions(
-      count,
-      module: module,
-    ),
+    ref.read(contentRepositoryProvider).randomQuestions(count, module: module),
   );
 }

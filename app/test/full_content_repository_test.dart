@@ -46,7 +46,11 @@ void main() {
             break;
           }
         }
-        expect(assetId, isNotNull, reason: 'sample paper should contain a graph');
+        expect(
+          assetId,
+          isNotNull,
+          reason: 'sample paper should contain a graph',
+        );
         final image = await repository.imageBytes(assetId!);
         expect(image, isNotNull);
         expect(image, isNotEmpty);

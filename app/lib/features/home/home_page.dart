@@ -8,12 +8,26 @@ import '../../data/database/app_database.dart';
 import '../../domain/models.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../practice/practice_launcher.dart';
+import '../updates/update_flow.dart';
 
-class HomePage extends ConsumerWidget {
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends ConsumerState<HomePage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) checkForAppUpdate(context, ref, manual: false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final activeSession = ref.watch(latestActiveSessionProvider);
     final reviews = ref.watch(reviewItemsProvider);
     final daily = ref.watch(dailyStatsProvider);
@@ -393,10 +407,7 @@ class _RecentPapers extends ConsumerWidget {
       error: (error, stack) => _ErrorBlock(error: error),
       data: (items) {
         if (items.isEmpty) {
-          return const AppEmptyState(
-            title: '题库为空',
-            message: '请先导入离线题库。',
-          );
+          return const AppEmptyState(title: '题库为空', message: '请先导入离线题库。');
         }
         return HairlineList(
           children: [

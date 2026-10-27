@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../updates/update_flow.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -102,9 +103,17 @@ class SettingsPage extends ConsumerWidget {
         ),
         const SizedBox(height: 18),
         const SectionHeading(title: '关于'),
-        const HairlineList(
+        HairlineList(
           children: [
             ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+              leading: const Icon(Icons.system_update_alt, size: 21),
+              title: const Text('应用更新'),
+              subtitle: const Text('启动自动检查，也支持下 SHA-256 校验'),
+              trailing: const Icon(Icons.chevron_right, size: 20),
+              onTap: () => checkForAppUpdate(context, ref, manual: true),
+            ),
+            const ListTile(
               contentPadding: EdgeInsets.symmetric(horizontal: 14),
               title: Text('狂刷题'),
               subtitle: Text('移动端首版 · 本地离线运行'),
