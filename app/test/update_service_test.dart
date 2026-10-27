@@ -66,8 +66,7 @@ void main() {
   });
 
   test('rejects an unsupported manifest schema', () {
-    final invalid = Map<String, Object>.from(manifest)
-      ..['schemaVersion'] = 2;
+    final invalid = Map<String, Object>.from(manifest)..['schemaVersion'] = 2;
     expect(
       () => UpdateService.parseManifest(
         jsonEncode(invalid),
