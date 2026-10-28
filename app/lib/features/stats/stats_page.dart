@@ -40,9 +40,7 @@ class _ReviewCard extends ConsumerWidget {
         final total = items.length;
         final progress = total == 0 ? 0.0 : mastered / total;
         return InkWell(
-          onTap: due > 0
-              ? () => ref.read(routerProvider).go('/wrong')
-              : null,
+          onTap: due > 0 ? () => ref.read(routerProvider).go('/wrong') : null,
           child: Container(
             padding: const EdgeInsets.all(16),
             color: AppColors.surface,

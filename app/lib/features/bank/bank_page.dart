@@ -7,6 +7,11 @@ import '../../domain/models.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../practice/practice_launcher.dart';
 
+/// 全量试卷列表，进程内缓存一次；搜索在内存里过滤。
+final papersProvider = FutureProvider<List<Paper>>((ref) {
+  return ref.watch(contentRepositoryProvider).searchPapers();
+});
+
 class BankPage extends ConsumerStatefulWidget {
   const BankPage({super.key});
 
@@ -27,64 +32,73 @@ class _BankPageState extends ConsumerState<BankPage> {
 
   @override
   Widget build(BuildContext context) {
-    return AppPage(
-      children: [
-        const PageIntro(title: '题库', description: '按试卷练习，或从收藏中挑出需要反复看的题。'),
-        TextField(
-          controller: _searchController,
-          onChanged: (value) => setState(() => _query = value),
-          textInputAction: TextInputAction.search,
-          decoration: InputDecoration(
-            hintText: _scope == _BankScope.papers ? '搜索年份、地区或试卷' : '搜索收藏题目',
-            prefixIcon: const Icon(Icons.search, size: 20),
-            suffixIcon: _query.isEmpty
-                ? null
-                : IconButton(
-                    tooltip: '清空搜索',
-                    onPressed: () {
-                      _searchController.clear();
-                      setState(() => _query = '');
-                    },
-                    icon: const Icon(Icons.close, size: 18),
-                  ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        SegmentedButton<_BankScope>(
-          segments: const [
-            ButtonSegment(
-              value: _BankScope.papers,
-              label: Text('试卷'),
-              icon: Icon(Icons.description_outlined, size: 17),
-            ),
-            ButtonSegment(
-              value: _BankScope.favorites,
-              label: Text('收藏'),
-              icon: Icon(Icons.bookmark_outline, size: 17),
-            ),
-          ],
-          selected: {_scope},
-          showSelectedIcon: false,
-          onSelectionChanged: (selection) {
-            setState(() => _scope = selection.first);
-          },
-        ),
-        const SizedBox(height: 18),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 180),
-          child: _scope == _BankScope.papers
-              ? _PaperList(
-                  key: const ValueKey('papers'),
-                  query: _query,
-                  onStart: _startPaper,
-                )
-              : _FavoriteList(
-                  key: const ValueKey('favorites'),
-                  query: _query,
-                  onStart: _startFavorite,
+    final normalized = _query.trim().toLowerCase();
+    return SafeArea(
+      bottom: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const PageIntro(
+                  title: '题库',
+                  description: '按试卷练习，或从收藏中挑出需要反复看的题。',
                 ),
-        ),
-      ],
+                TextField(
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _query = value),
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: _scope == _BankScope.papers
+                        ? '搜索年份、地区或试卷'
+                        : '搜索收藏题目',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: '清空搜索',
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _query = '');
+                            },
+                            icon: const Icon(Icons.close, size: 18),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SegmentedButton<_BankScope>(
+                  segments: const [
+                    ButtonSegment(
+                      value: _BankScope.papers,
+                      label: Text('试卷'),
+                      icon: Icon(Icons.description_outlined, size: 17),
+                    ),
+                    ButtonSegment(
+                      value: _BankScope.favorites,
+                      label: Text('收藏'),
+                      icon: Icon(Icons.bookmark_outline, size: 17),
+                    ),
+                  ],
+                  selected: {_scope},
+                  showSelectedIcon: false,
+                  onSelectionChanged: (selection) {
+                    setState(() => _scope = selection.first);
+                  },
+                ),
+                const SizedBox(height: 14),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _scope == _BankScope.papers
+                ? _PaperList(query: normalized, onStart: _startPaper)
+                : _FavoriteList(query: normalized, onStart: _startFavorite),
+          ),
+        ],
+      ),
     );
   }
 
@@ -119,40 +133,52 @@ class _BankPageState extends ConsumerState<BankPage> {
 enum _BankScope { papers, favorites }
 
 class _PaperList extends ConsumerWidget {
-  const _PaperList({required this.query, required this.onStart, super.key});
+  const _PaperList({required this.query, required this.onStart});
 
   final String query;
   final Future<void> Function(Paper paper, {bool mock}) onStart;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final papers = ref
-        .read(contentRepositoryProvider)
-        .searchPapers(query: query);
-    return FutureBuilder<List<Paper>>(
-      future: Future.value(papers),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Padding(
-            padding: EdgeInsets.all(28),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-        if (snapshot.hasError) return Text('读取试卷失败：${snapshot.error}');
-        final items = snapshot.data ?? const [];
-        if (items.isEmpty) {
-          return const AppEmptyState(
-            title: '没有匹配的试卷',
-            message: '换一个年份、地区或试卷名称试试。',
-          );
-        }
-        return Column(
-          children: [
-            for (final paper in items) ...[
-              _PaperRow(paper: paper, onStart: onStart),
-              const SizedBox(height: 9),
+    final papers = ref.watch(papersProvider);
+    return papers.when(
+      loading: () => const Center(
+        child: Padding(
+          padding: EdgeInsets.all(28),
+          child: CircularProgressIndicator(),
+        ),
+      ),
+      error: (error, stack) => Padding(
+        padding: const EdgeInsets.all(28),
+        child: Text('读取试卷失败：$error'),
+      ),
+      data: (items) {
+        final filtered = query.isEmpty
+            ? items
+            : items
+                  .where(
+                    (paper) =>
+                        paper.title.toLowerCase().contains(query) ||
+                        paper.region.toLowerCase().contains(query) ||
+                        paper.year.toString().contains(query),
+                  )
+                  .toList(growable: false);
+        if (filtered.isEmpty) {
+          return ListView(
+            children: const [
+              AppEmptyState(
+                title: '没有匹配的试卷',
+                message: '换一个年份、地区或试卷名称试试。',
+              ),
             ],
-          ],
+          );
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 28),
+          itemCount: filtered.length,
+          itemBuilder: (context, index) =>
+              _PaperRow(paper: filtered[index], onStart: onStart),
+          separatorBuilder: (context, index) => const SizedBox(height: 9),
         );
       },
     );
@@ -224,7 +250,7 @@ class _PaperRow extends StatelessWidget {
 }
 
 class _FavoriteList extends ConsumerWidget {
-  const _FavoriteList({required this.query, required this.onStart, super.key});
+  const _FavoriteList({required this.query, required this.onStart});
 
   final String query;
   final Future<void> Function(List<QuestionContent> questions) onStart;
@@ -236,7 +262,6 @@ class _FavoriteList extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => Text('读取收藏失败：$error'),
       data: (items) {
-        final normalized = query.trim().toLowerCase();
         final loaded = ref
             .read(contentRepositoryProvider)
             .questionsByIds(items.map((item) => item.questionId));
@@ -244,28 +269,32 @@ class _FavoriteList extends ConsumerWidget {
           future: Future.value(loaded),
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
-              return const Padding(
-                padding: EdgeInsets.all(28),
-                child: Center(child: CircularProgressIndicator()),
-              );
+              return const Center(child: CircularProgressIndicator());
             }
             if (snapshot.hasError) {
               return Text('读取收藏失败：${snapshot.error}');
             }
-            final questions = (snapshot.data ?? const [])
+            final questions = (snapshot.data ?? const <QuestionContent>[])
                 .where(
                   (question) =>
-                      normalized.isEmpty ||
-                      question.plainStem.toLowerCase().contains(normalized),
+                      query.isEmpty ||
+                      question.plainStem.toLowerCase().contains(query),
                 )
                 .toList(growable: false);
             if (questions.isEmpty) {
-              return AppEmptyState(
-                title: query.isEmpty ? '还没有收藏题目' : '没有匹配的收藏',
-                message: query.isEmpty ? '做题时点一下书签，题目会出现在这里。' : '换一个题干关键词试试。',
+              return ListView(
+                children: [
+                  AppEmptyState(
+                    title: query.isEmpty ? '还没有收藏题目' : '没有匹配的收藏',
+                    message: query.isEmpty
+                        ? '做题时点一下书签，题目会出现在这里。'
+                        : '换一个题干关键词试试。',
+                  ),
+                ],
               );
             }
-            return Column(
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 28),
               children: [
                 Align(
                   alignment: Alignment.centerRight,

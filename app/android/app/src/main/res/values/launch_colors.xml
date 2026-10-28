@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 与 AppColors.paper 一致 -->
+    <color name="launch_background_color">#F4F3EF</color>
+    <!-- 暗色模式启动底色 -->
+    <color name="launch_background_color_dark">#171715</color>
+</resources>
