@@ -104,7 +104,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: '离线题库',
               subtitle: contentStats.when(
                 data: (stats) =>
-                    '${stats.questionCount} 道题 · ${stats.paperCount} 份试卷 · 版本 ${stats.contentVersion}',
+                    '版本 ${stats.contentVersion}',
                 loading: () => '正在读取题库',
                 error: (error, stackTrace) => '题库读取失败',
               ),
