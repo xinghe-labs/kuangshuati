@@ -6,7 +6,6 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,16 +13,22 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:kuangshuati/core/providers.dart';
 import 'package:kuangshuati/core/theme/app_theme.dart';
+import 'package:kuangshuati/data/content/content_repository.dart' as repo;
 import 'package:kuangshuati/data/content/seed_content_repository.dart';
 import 'package:kuangshuati/shared/widgets/app_widgets.dart';
 import 'package:kuangshuati/shared/widgets/rich_content.dart';
 
 class _ImageContentRepository extends SeedContentRepository {
   @override
-  Uint8List? imageBytes(String assetId) {
-    return base64Decode(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk'
-      '/A8AAusB9Y9Z4WQAAAAASUVORK5CYII=',
+  Future<repo.ContentImage?> imageWithSize(String assetId) async {
+    // 1x1 PNG，声明高度 20 → 走行内分流。
+    return repo.ContentImage(
+      bytes: base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk'
+        '/A8AAusB9Y9Z4WQAAAAASUVORK5CYII=',
+      ),
+      width: 1,
+      height: 20,
     );
   }
 }

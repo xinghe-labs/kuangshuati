@@ -8,13 +8,7 @@ import '../../data/content/full_content_repository.dart';
 import '../../data/content/seed_content_repository.dart';
 import 'content_package_service.dart';
 
-enum ContentManagerPhase {
-  checking,
-  needsDownload,
-  downloading,
-  ready,
-  failed,
-}
+enum ContentManagerPhase { checking, needsDownload, downloading, ready, failed }
 
 class ContentManager extends ChangeNotifier {
   ContentManager({
