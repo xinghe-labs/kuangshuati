@@ -3,6 +3,19 @@ import 'dart:typed_data';
 
 import '../../domain/models.dart';
 
+/// 一张题图：字节 + 原始尺寸，供行内混排按高度分流渲染。
+class ContentImage {
+  const ContentImage({
+    required this.bytes,
+    required this.width,
+    required this.height,
+  });
+
+  final Uint8List bytes;
+  final int width;
+  final int height;
+}
+
 class ContentStats {
   const ContentStats({
     required this.questionCount,
@@ -37,6 +50,13 @@ abstract class ContentRepository {
   FutureOr<List<QuestionContent>> sequenceQuestions({int limit = 100});
 
   FutureOr<Uint8List?> imageBytes(String assetId);
+
+  /// 取图并带原始尺寸；行内公式图需要按高度决定行内/块级渲染。
+  FutureOr<ContentImage?> imageWithSize(String assetId) => null;
+
+  /// 同步取这批图的原始高度（构建阶段决定行内/块级）。
+  /// 只查当前 markup 里出现的少量 assetId，走主键索引，开销可忽略。
+  Map<String, int> imageHeightsSync(Iterable<String> assetIds) => const {};
 
   void close();
 }

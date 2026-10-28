@@ -188,9 +188,15 @@ class FullContentRepository implements ContentRepository {
 
   @override
   Future<Uint8List?> imageBytes(String assetId) async {
+    final image = await imageWithSize(assetId);
+    return image?.bytes;
+  }
+
+  @override
+  Future<ContentImage?> imageWithSize(String assetId) async {
     final rows = _database.select(
       '''
-      SELECT images.data
+      SELECT images.data, images.width, images.height
       FROM assets
       JOIN images ON images.hash = assets.hash
       WHERE assets.asset_id = ? AND assets.available = 1
@@ -199,7 +205,43 @@ class FullContentRepository implements ContentRepository {
       [assetId],
     );
     if (rows.isEmpty) return null;
-    return rows.first['data'] as Uint8List;
+    final row = rows.first;
+    return ContentImage(
+      bytes: row['data'] as Uint8List,
+      width: row['width'] as int,
+      height: row['height'] as int,
+    );
+  }
+
+  /// assetId → 原始高度，命中后永不再查。
+  final Map<String, int> _heightCache = {};
+
+  @override
+  Map<String, int> imageHeightsSync(Iterable<String> assetIds) {
+    final requested = assetIds.toSet();
+    final missing = requested
+        .where((id) => !_heightCache.containsKey(id))
+        .toList();
+    if (missing.isNotEmpty) {
+      final placeholders = List.filled(missing.length, '?').join(',');
+      for (final row in _database.select(
+        'SELECT asset_id, height FROM assets '
+        'WHERE available = 1 AND asset_id IN ($placeholders)',
+        missing,
+      )) {
+        final height = row['height'];
+        if (height is int && height > 0) {
+          _heightCache[row['asset_id'] as String] = height;
+        }
+      }
+      for (final id in missing) {
+        _heightCache.putIfAbsent(id, () => 0);
+      }
+    }
+    return {
+      for (final id in requested)
+        if ((_heightCache[id] ?? 0) > 0) id: _heightCache[id]!,
+    };
   }
 
   Paper _paperFromRow(Row row) {
