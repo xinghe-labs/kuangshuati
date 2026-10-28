@@ -157,6 +157,8 @@ class ContentManager extends ChangeNotifier {
   }
 
   Future<bool> downloadAndInstall() async {
+    // 并发重入保护：下载进行中重复触发会竞争临时文件，
+    // 曾导致偶发 SqliteException(14)，这里直接拒绝重复进入。
     if (_phase == ContentManagerPhase.downloading) return false;
     try {
       final manifest =
