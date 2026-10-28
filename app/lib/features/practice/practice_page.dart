@@ -598,63 +598,68 @@ class _PracticePageState extends ConsumerState<PracticePage>
     final picked = await showModalBottomSheet<int>(
       context: context,
       isScrollControlled: true,
+      // 全屏高度可用（减去顶部留白），129 题的长答题卡需要内部滚动。
       builder: (context) {
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 0, 18, 22),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('答题卡', style: Theme.of(context).textTheme.headlineSmall),
-                const SizedBox(height: 5),
-                Text(
-                  '已答 ${_selected.values.where((value) => value.isNotEmpty).length} / ${_rows.length}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 16),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 5,
-                    mainAxisSpacing: 9,
-                    crossAxisSpacing: 9,
+          child: SizedBox(
+            height: MediaQuery.of(context).size.height * 0.82,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('答题卡', style: Theme.of(context).textTheme.headlineSmall),
+                  const SizedBox(height: 5),
+                  Text(
+                    '已答 ${_selected.values.where((value) => value.isNotEmpty).length} / ${_rows.length}',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  itemCount: _rows.length,
-                  itemBuilder: (context, index) {
-                    final questionId = _rows[index].questionId;
-                    final answer = _answers[questionId];
-                    final selected = _selected[questionId] ?? {};
-                    return _AnswerCardCell(
-                      index: index,
-                      current: index == _index,
-                      answered: selected.isNotEmpty,
-                      uncertain: _uncertain.contains(questionId),
-                      correct: answer?.submitted == true
-                          ? answer?.isCorrect
-                          : null,
-                      onTap: () => Navigator.pop(context, index),
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const _LegendDot(label: '已答', color: AppColors.ink),
-                    const SizedBox(width: 13),
-                    const _LegendDot(label: '不确定', color: AppColors.warning),
-                    const Spacer(),
-                    FilledButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _confirmFinish();
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: GridView.builder(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 5,
+                            mainAxisSpacing: 9,
+                            crossAxisSpacing: 9,
+                          ),
+                      itemCount: _rows.length,
+                      itemBuilder: (context, index) {
+                        final questionId = _rows[index].questionId;
+                        final answer = _answers[questionId];
+                        final selected = _selected[questionId] ?? {};
+                        return _AnswerCardCell(
+                          index: index,
+                          current: index == _index,
+                          answered: selected.isNotEmpty,
+                          uncertain: _uncertain.contains(questionId),
+                          correct: answer?.submitted == true
+                              ? answer?.isCorrect
+                              : null,
+                          onTap: () => Navigator.pop(context, index),
+                        );
                       },
-                      child: const Text('检查并交卷'),
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const _LegendDot(label: '已答', color: AppColors.ink),
+                      const SizedBox(width: 13),
+                      const _LegendDot(label: '不确定', color: AppColors.warning),
+                      const Spacer(),
+                      FilledButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _confirmFinish();
+                        },
+                        child: const Text('检查并交卷'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         );

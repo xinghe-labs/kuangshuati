@@ -265,6 +265,12 @@ class SeedContentRepository implements ContentRepository {
   Uint8List? imageBytes(String assetId) => null;
 
   @override
+  Future<ContentImage?> imageWithSize(String assetId) async => null;
+
+  @override
+  Map<String, int> imageHeightsSync(Iterable<String> assetIds) => const {};
+
+  @override
   ContentStats stats() {
     return const ContentStats(
       questionCount: 12,

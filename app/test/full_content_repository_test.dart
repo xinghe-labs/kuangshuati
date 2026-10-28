@@ -80,10 +80,20 @@ void main() {
         final image = await repository.imageBytes(assetId!);
         expect(image, isNotNull);
         expect(image, isNotEmpty);
+        // 行内/块级分流依赖同步高度查询：必须能拿到与图片真实高度一致的值。
+        final heights = repository.imageHeightsSync([assetId]);
+        expect(heights[assetId], isNotNull, reason: 'asset height must be indexed');
+        expect(heights[assetId], greaterThan(0));
+        expect(
+          repository.imageHeightsSync(['asset_does_not_exist']),
+          isEmpty,
+          reason: 'unknown asset must not be reported as inline-sized',
+        );
         final codec = await ui.instantiateImageCodec(image!);
         final frame = await codec.getNextFrame();
         expect(frame.image.width, greaterThan(0));
         expect(frame.image.height, greaterThan(0));
+        expect(heights[assetId], frame.image.height);
         frame.image.dispose();
         codec.dispose();
       } finally {
