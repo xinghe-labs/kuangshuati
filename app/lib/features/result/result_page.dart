@@ -48,9 +48,12 @@ class _ResultPageState extends ConsumerState<ResultPage> {
     }
     final session = _session!;
     final details = [
-      for (final row in _rows)
+      for (final (index, row) in _rows.indexed)
         if (_questions[row.questionId] case final question?)
           (
+            // 复习列表里的“第 N 题”是本场练习的位置，不是原卷题号：
+            // 原卷题号按模块重新计数，同卷里有多个“第 1 题”。
+            number: index + 1,
             question: question,
             answer: _answers[row.questionId],
             module: question.module,
@@ -62,7 +65,11 @@ class _ResultPageState extends ConsumerState<ResultPage> {
     final correct = details
         .where((item) => item.answer?.isCorrect == true)
         .length;
-    final score = details.isEmpty ? 0.0 : correct / details.length;
+    // 开发文档 §11.1 / §11.2：练习看“正确率”（分母只算已作答题），
+    // 模考看“得分率”（分母是整卷题数，未答按零分）。
+    final isMock = session.mode == domain.PracticeMode.mock.name;
+    final ratioBase = isMock ? details.length : answered;
+    final score = ratioBase == 0 ? 0.0 : correct / ratioBase;
     final visible = _wrongOnly
         ? details.where((item) => item.answer?.isCorrect != true).toList()
         : details;
@@ -108,14 +115,11 @@ class _ResultPageState extends ConsumerState<ResultPage> {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const Padding(
-                      padding: EdgeInsets.only(left: 4, bottom: 5),
-                      child: Text(
-                        '% 得分率',
-                        style: TextStyle(
-                          color: Color(0xFFD1D1CA),
-                          fontSize: 12,
-                        ),
+                    Text(
+                      isMock ? '% 得分率' : '% 正确率',
+                      style: const TextStyle(
+                        color: Color(0xFFD1D1CA),
+                        fontSize: 12,
                       ),
                     ),
                   ],
@@ -175,6 +179,7 @@ class _ResultPageState extends ConsumerState<ResultPage> {
           else
             for (final item in visible) ...[
               _ResultQuestion(
+                number: item.number,
                 question: item.question,
                 answer: item.answer,
                 module: item.module,
@@ -267,11 +272,13 @@ class _ResultMetric extends StatelessWidget {
 
 class _ResultQuestion extends StatelessWidget {
   const _ResultQuestion({
+    required this.number,
     required this.question,
     required this.answer,
     required this.module,
   });
 
+  final int number;
   final domain.QuestionContent question;
   final db.SessionAnswer? answer;
   final String module;
@@ -298,7 +305,7 @@ class _ResultQuestion extends StatelessWidget {
               ? AppColors.positiveFill
               : AppColors.negativeFill,
           child: Text(
-            '${question.questionNo}',
+            '$number',
             style: TextStyle(
               color: blank
                   ? AppColors.muted

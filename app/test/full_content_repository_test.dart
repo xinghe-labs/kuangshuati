@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kuangshuati/data/content/full_content_repository.dart';
+import 'package:kuangshuati/domain/models.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -82,7 +83,11 @@ void main() {
         expect(image, isNotEmpty);
         // 行内/块级分流依赖同步高度查询：必须能拿到与图片真实高度一致的值。
         final heights = repository.imageHeightsSync([assetId]);
-        expect(heights[assetId], isNotNull, reason: 'asset height must be indexed');
+        expect(
+          heights[assetId],
+          isNotNull,
+          reason: 'asset height must be indexed',
+        );
         expect(heights[assetId], greaterThan(0));
         expect(
           repository.imageHeightsSync(['asset_does_not_exist']),
@@ -96,6 +101,90 @@ void main() {
         expect(heights[assetId], frame.image.height);
         frame.image.dispose();
         codec.dispose();
+
+        // 开发文档 §9.1：随机抽题以材料组为最小单位，整组取、不重复、至少凑满请求数。
+        // 真实数据的两个例外已在仓储层处理：上游 group_id 为空的 43 904 道题，
+        // 以及 35/50/60 题的超大材料组——它们按单题抽，否则会一次抽出整库或整节。
+        final paperCache = <String, List<QuestionContent>>{};
+        Future<Set<String>> groupOf(
+          List<QuestionContent> sample,
+          String groupId,
+        ) async {
+          final one = sample.firstWhere((item) => item.groupId == groupId);
+          final paper = paperCache[one.paperId] ??= await repository!
+              .questionsForPaper(one.paperId);
+          return paper
+              .where((item) => item.groupId == groupId)
+              .map((item) => item.id)
+              .toSet();
+        }
+
+        /// 整组抽到的材料组必须完整；装不下的超大组与空 group_id 允许单题抽。
+        Future<void> expectGroupsIntact(
+          List<QuestionContent> sample,
+          int count,
+        ) async {
+          for (final groupId in sample.map((item) => item.groupId).toSet()) {
+            if (groupId.isEmpty) continue;
+            final expected = await groupOf(sample, groupId);
+            if (expected.length > count) continue;
+            final actual = sample
+                .where((item) => item.groupId == groupId)
+                .map((item) => item.id)
+                .toSet();
+            expect(
+              actual,
+              expected,
+              reason: 'material group $groupId was split apart',
+            );
+          }
+        }
+
+        final random = await repository.randomQuestions(20);
+        expect(random.length, greaterThanOrEqualTo(20));
+        expect(
+          random.map((question) => question.id).toSet().length,
+          random.length,
+          reason: 'random sampling must not repeat a question',
+        );
+        await expectGroupsIntact(random, 20);
+
+        // 资料分析题基本都是“一段材料 + 5 道小题”，专门验一遍整组语义。
+        final materialSample = await repository.randomQuestions(
+          10,
+          module: '资料分析',
+        );
+        expect(materialSample.length, greaterThanOrEqualTo(10));
+        expect(materialSample.map((question) => question.module).toSet(), {
+          '资料分析',
+        });
+        final sampledGroups = materialSample
+            .map((question) => question.groupId)
+            .where((groupId) => groupId.isNotEmpty)
+            .toSet();
+        expect(
+          sampledGroups,
+          isNotEmpty,
+          reason: '资料分析 questions must come with their material group',
+        );
+        expect(
+          sampledGroups.any(
+            (groupId) =>
+                materialSample.where((item) => item.groupId == groupId).length >
+                1,
+          ),
+          isTrue,
+          reason: 'a 资料分析 group holds several sub-questions',
+        );
+        await expectGroupsIntact(materialSample, 10);
+        final moduleSample = await repository.randomQuestions(
+          6,
+          module: '言语理解',
+        );
+        expect(
+          moduleSample.every((question) => question.module == '言语理解'),
+          isTrue,
+        );
       } finally {
         repository?.close();
         if (await directory.exists()) {

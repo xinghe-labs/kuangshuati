@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -83,9 +84,29 @@ class _ContentInstallPageState extends ConsumerState<ContentInstallPage> {
                         color: AppColors.negativeFill,
                         border: Border.all(color: AppColors.negative),
                       ),
-                      child: Text(
-                        manager.errorMessage!,
-                        style: const TextStyle(color: AppColors.negative),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            manager.errorMessage!,
+                            style: const TextStyle(color: AppColors.negative),
+                          ),
+                          // 原文只给调试构建看：发布版不把 SocketException、
+                          // 本机端口这类信息倒给用户。与主文案重复时不展示，
+                          // 否则同一句话会出现两遍。
+                          if (kDebugMode &&
+                              manager.errorDetail != null &&
+                              manager.errorDetail != manager.errorMessage) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              manager.errorDetail!,
+                              style: const TextStyle(
+                                color: AppColors.muted,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ],

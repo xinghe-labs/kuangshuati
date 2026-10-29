@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../backup/backup_page.dart';
 import '../content/content_install_page.dart';
 import '../updates/update_flow.dart';
 
@@ -122,9 +123,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
             _divider,
             _SettingTile(
+              icon: Icons.backup_outlined,
+              title: '备份与恢复',
+              subtitle: '导出或恢复练习记录，换机、重装不丢进度',
+              trailing: const Icon(Icons.chevron_right, size: 20),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (context) => const BackupPage(),
+                ),
+              ),
+            ),
+            _divider,
+            _SettingTile(
               icon: Icons.delete_sweep_outlined,
               title: '清空练习记录',
-              subtitle: '删除答题历史、错题本、收藏和统计，不影响题库',
+              subtitle: '删除答题历史、错题本、收藏和统计，不影响题库；建议先导出备份',
               trailing: const Icon(Icons.chevron_right, size: 20),
               onTap: () => _confirmClearData(),
             ),
@@ -132,7 +145,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _SettingTile(
               icon: Icons.phone_android,
               title: '本机存储',
-              subtitle: '练习记录与偏好只保存在这台设备，不联网上传',
+              subtitle: '练习记录只保存在这台设备，可随时导出备份，不联网上传',
             ),
           ],
         ),
