@@ -10,8 +10,7 @@ import '../../core/network/proxy_http_client.dart';
 
 const contentManifestUrl = String.fromEnvironment(
   'CONTENT_MANIFEST_URL',
-  defaultValue:
-      'https://content.example.com/content-manifest.json',
+  defaultValue: '',
 );
 const contentHttpProxy = String.fromEnvironment(
   'CONTENT_HTTP_PROXY',
