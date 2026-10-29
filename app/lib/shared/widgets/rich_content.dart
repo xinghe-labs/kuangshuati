@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -24,26 +25,70 @@ const _kInlineDesignFontSize = 15.0;
 
 /// 题图富文本：分段落渲染；行内小图与文字同基线混排，
 /// 连续块级图用 Wrap 并排；所有图保留点击放大。
-class RichContent extends ConsumerWidget {
+class RichContent extends ConsumerStatefulWidget {
   const RichContent(this.markup, {this.style, super.key});
 
   final String markup;
   final TextStyle? style;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RichContent> createState() => _RichContentState();
+}
+
+class _RichContentState extends ConsumerState<RichContent> {
+  /// assetId → 原始像素高度。
+  ///
+  /// 高度来自题库的资产索引，只影响「行内还是块级」的判定，属于排版优化：
+  /// 首帧先用 markup 里声明的 height 画出来，查到了再重建。
+  /// 这样避免为了一个排版细节把整个内容区卡在加载态。
+  Map<String, int> _heights = const {};
+  String? _requestedMarkup;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ensureHeights();
+  }
+
+  @override
+  void didUpdateWidget(covariant RichContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.markup != widget.markup) _ensureHeights();
+  }
+
+  void _ensureHeights() {
+    final markup = widget.markup;
+    if (_requestedMarkup == markup) return;
+    _requestedMarkup = markup;
+    final assetIds = _parseSegments(markup)
+        .where((segment) => segment.assetId != null)
+        .map((segment) => segment.assetId!)
+        .toList(growable: false);
+    if (assetIds.isEmpty) {
+      if (_heights.isNotEmpty) setState(() => _heights = const {});
+      return;
+    }
+    ref
+        .read(contentRepositoryProvider)
+        .imageHeights(assetIds)
+        .then((heights) {
+          if (!mounted || _requestedMarkup != markup) return;
+          if (heights.isEmpty) return;
+          setState(() => _heights = heights);
+        })
+        .catchError((Object _) {
+          // 查不到高度就沿用 markup 声明值，不影响内容展示。
+        });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final markup = widget.markup;
     final baseStyle =
-        style ??
+        widget.style ??
         const TextStyle(color: AppColors.ink, fontSize: 15, height: 1.65);
     final segments = _parseSegments(markup);
-    // markup 里的 PUA 图标记不带尺寸，从资产索引同步查高度（仅当前题的几张图）。
-    final heights = ref
-        .read(contentRepositoryProvider)
-        .imageHeightsSync(
-          segments
-              .where((segment) => segment.assetId != null)
-              .map((segment) => segment.assetId!),
-        );
+    final heights = _heights;
     // 行内判定：阈值内，或夹在句中（前后同一行都有文字）且高度不超句中上限。
     final inlineFlags = _resolveInlineFlags(segments, heights);
 
@@ -54,10 +99,16 @@ class RichContent extends ConsumerWidget {
 
     void flushInline() {
       if (inlineSpans.isEmpty) return;
+      final span = TextSpan(children: List.of(inlineSpans), style: baseStyle);
+      // Web 上用 SelectableText 会有两个真问题：
+      // 1) 它在画布上盖一层 textarea，把点击拦下来，选项点文字没反应；
+      // 2) 语义节点的文字变空，屏幕阅读器读不到题干和选项。
+      // 桌面端可以按住鼠标选字，但刷题页更需要“点得动、读得出”，
+      // 所以 web 退回普通 Text，原生端保留可选中。
       paragraphs.add(
-        SelectableText.rich(
-          TextSpan(children: List.of(inlineSpans), style: baseStyle),
-        ),
+        kIsWeb
+            ? Text.rich(span)
+            : SelectableText.rich(span),
       );
       inlineSpans.clear();
     }

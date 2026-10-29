@@ -1,9 +1,10 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
-import 'package:drift_flutter/drift_flutter.dart';
 
 import '../../domain/models.dart';
+import 'database_connection_io.dart'
+    if (dart.library.js_interop) 'database_connection_web.dart';
 
 part 'app_database.g.dart';
 
@@ -122,7 +123,9 @@ class AppSettings extends Table {
   ],
 )
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : _clock = null, super(driftDatabase(name: 'kuangshuati_user'));
+  AppDatabase()
+    : _clock = null,
+      super(openUserDatabase(name: 'kuangshuati_user'));
 
   AppDatabase.forTesting(super.executor, {DateTime Function()? clock})
     : _clock = clock; // ignore: prefer_initializing_formals

@@ -280,7 +280,8 @@ class SeedContentRepository implements ContentRepository {
   Future<ContentImage?> imageWithSize(String assetId) async => null;
 
   @override
-  Map<String, int> imageHeightsSync(Iterable<String> assetIds) => const {};
+  Future<Map<String, int>> imageHeights(Iterable<String> assetIds) async =>
+      const {};
 
   @override
   ContentStats stats() {
@@ -293,5 +294,5 @@ class SeedContentRepository implements ContentRepository {
   }
 
   @override
-  void close() {}
+  Future<void> close() async {}
 }

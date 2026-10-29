@@ -81,8 +81,8 @@ void main() {
         final image = await repository.imageBytes(assetId!);
         expect(image, isNotNull);
         expect(image, isNotEmpty);
-        // 行内/块级分流依赖同步高度查询：必须能拿到与图片真实高度一致的值。
-        final heights = repository.imageHeightsSync([assetId]);
+        // 行内/块级分流依赖高度查询：必须能拿到与图片真实高度一致的值。
+        final heights = await repository.imageHeights([assetId]);
         expect(
           heights[assetId],
           isNotNull,
@@ -90,7 +90,7 @@ void main() {
         );
         expect(heights[assetId], greaterThan(0));
         expect(
-          repository.imageHeightsSync(['asset_does_not_exist']),
+          await repository.imageHeights(['asset_does_not_exist']),
           isEmpty,
           reason: 'unknown asset must not be reported as inline-sized',
         );

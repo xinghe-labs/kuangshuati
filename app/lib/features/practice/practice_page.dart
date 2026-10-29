@@ -711,63 +711,96 @@ class _OptionTile extends StatelessWidget {
         : selected
         ? AppColors.ink
         : AppColors.line;
-    return Material(
-      color: background,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(
-          color: border,
-          width: selected || showResult ? 1.4 : 1,
+    // 选项的可读名：字母 + 正文 + 结果。
+    //
+    // 选项是「一整块可点区域」，如果不给语义，屏幕阅读器只会读到一个无名的
+    // 可点元素，用户既不知道这是哪个选项，也听不到正文和选中状态。
+    final optionText = _plainMarkup(text);
+    final stateLabel = isCorrect
+        ? '，正确答案'
+        : isWrongSelection
+        ? '，选错'
+        : selected
+        ? '，已选'
+        : '';
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$letter。$optionText$stateLabel',
+      // 子节点（字母圈、富文本、对错图标）已经合并进 label，
+      // 否则会被重复朗读一遍。
+      excludeSemantics: true,
+      child: Material(
+        color: background,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(
+            color: border,
+            width: selected || showResult ? 1.4 : 1,
+          ),
+          borderRadius: BorderRadius.circular(6),
         ),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 13),
-          child: Row(
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: selected || isCorrect ? border : AppColors.softFill,
-                  shape: BoxShape.circle,
-                ),
-                child: Text(
-                  letter,
-                  style: TextStyle(
-                    color: selected || isCorrect ? Colors.white : AppColors.ink,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 13),
+            child: Row(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: selected || isCorrect ? border : AppColors.softFill,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    letter,
+                    style: TextStyle(
+                      color: selected || isCorrect
+                          ? Colors.white
+                          : AppColors.ink,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: RichContent(
-                  text,
-                  style: const TextStyle(
-                    color: AppColors.ink,
-                    fontSize: 15,
-                    height: 1.55,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: RichContent(
+                    text,
+                    style: const TextStyle(
+                      color: AppColors.ink,
+                      fontSize: 15,
+                      height: 1.55,
+                    ),
                   ),
                 ),
-              ),
-              if (isCorrect)
-                const Icon(
-                  Icons.check_circle,
-                  color: AppColors.positive,
-                  size: 19,
-                ),
-              if (isWrongSelection)
-                const Icon(Icons.cancel, color: AppColors.negative, size: 19),
-            ],
+                if (isCorrect)
+                  const Icon(
+                    Icons.check_circle,
+                    color: AppColors.positive,
+                    size: 19,
+                  ),
+                if (isWrongSelection)
+                  const Icon(Icons.cancel, color: AppColors.negative, size: 19),
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  /// 把选项 markup 转成一句可朗读的纯文本。
+  ///
+  /// markup 里的图片用 PUA 标记占位（\uE000asset\uE001），直接朗读会念出乱码，
+  /// 所以换成「图」字占位，保留“这里有个图”的信息。
+  static String _plainMarkup(String markup) {
+    final withoutImages = markup.replaceAll(RegExp('[\uE000-\uF8FF]'), '');
+    final collapsed = withoutImages.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (collapsed.isEmpty) return '（含图片）';
+    return collapsed;
   }
 }
 

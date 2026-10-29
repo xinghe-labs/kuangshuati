@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../data/content/content_repository.dart';
 import '../../data/content/full_content_repository.dart';
 import '../../data/content/seed_content_repository.dart';
+import 'content_manager_base.dart';
 import 'content_package_service.dart';
 
 /// 把底层异常翻成用户能看懂的一句话。
@@ -27,9 +28,7 @@ String friendlyContentError(Object error) {
   return '题库处理失败，请重试。';
 }
 
-enum ContentManagerPhase { checking, needsDownload, downloading, ready, failed }
-
-class ContentManager extends ChangeNotifier {
+class ContentManager extends ContentManagerBase {
   ContentManager({
     required ContentRepository seedRepository,
     Directory? supportDirectory,
@@ -64,25 +63,36 @@ class ContentManager extends ChangeNotifier {
   bool _manifestCheckStarted = false;
   bool _disposed = false;
 
+  @override
   ContentRepository get repository => _repository;
 
+  @override
   ContentManagerPhase get phase => _phase;
 
   ContentPackageManifest? get installedManifest => _installedManifest;
 
   ContentPackageManifest? get availableManifest => _availableManifest;
 
+  @override
+  bool get hasManifest => _availableManifest != null;
+
+  @override
   double get progress => _progress;
 
+  @override
   String get stage => _stage;
 
+  @override
   String? get errorMessage => _errorMessage;
 
   /// 底层异常原文，只在调试构建里展示，发布版只给用户看 [errorMessage]。
+  @override
   String? get errorDetail => _errorDetail;
 
+  @override
   bool get hasFullContent => _fullRepository != null;
 
+  @override
   bool get updateAvailable =>
       _availableManifest != null &&
       _installedManifest != null &&
@@ -149,6 +159,7 @@ class ContentManager extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> checkForManifest({bool silent = false}) async {
     if (_phase == ContentManagerPhase.downloading) return;
     if (_manifestCheckStarted && silent) return;
@@ -182,6 +193,10 @@ class ContentManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
+  Future<void> refresh() => checkForManifest(silent: true);
+
+  @override
   Future<bool> downloadAndInstall() async {
     // 并发重入保护：下载进行中重复触发会竞争临时文件，
     // 曾导致偶发 SqliteException(14)，这里直接拒绝重复进入。
