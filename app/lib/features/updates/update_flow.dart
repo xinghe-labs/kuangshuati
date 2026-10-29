@@ -12,6 +12,14 @@ Future<void> checkForAppUpdate(
   WidgetRef ref, {
   required bool manual,
 }) async {
+  // 应用内更新靠下载 APK 交给系统安装器，只有 Android 有这条链路。
+  // iOS/Web 上不拦的话会白下载 60MB 安装包，最后报“无法启动系统安装器”。
+  if (!Platform.isAndroid) {
+    if (manual && context.mounted) {
+      _showMessage(context, '当前平台不支持应用内更新，请通过分发渠道获取新版本');
+    }
+    return;
+  }
   final service = ref.read(updateServiceProvider);
   try {
     final update = await service.checkForUpdate();
