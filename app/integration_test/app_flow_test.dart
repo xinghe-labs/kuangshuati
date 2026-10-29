@@ -199,18 +199,17 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '确认交卷'));
     await pumpUntil(tester, find.text('% 得分率'));
 
-    final daily = await userDatabase
-        .watchDailyStats()
-        .first
-        .timeout(const Duration(seconds: 10));
+    final daily = await userDatabase.watchDailyStats().first.timeout(
+      const Duration(seconds: 10),
+    );
     expect(daily.single.sessionsCount, 1);
     expect(daily.single.answeredCount, 1);
     // 模考得分率的分母是整卷题数，未答按零分，所以答对数不可能超过已答数。
     expect(daily.single.correctCount, lessThanOrEqualTo(1));
     expect(
-      await userDatabase
-          .latestActiveSession()
-          .timeout(const Duration(seconds: 10)),
+      await userDatabase.latestActiveSession().timeout(
+        const Duration(seconds: 10),
+      ),
       isNull,
     );
     // 真机集成环境下 NativeDatabase.memory().close() 会挂起（sqlite3 异步
@@ -246,15 +245,14 @@ void main() {
     await pumpUntil(tester, find.text('% 得分率'));
     expect(find.textContaining('考试时间已到'), findsWidgets);
 
-    final daily = await userDatabase
-        .watchDailyStats()
-        .first
-        .timeout(const Duration(seconds: 10));
+    final daily = await userDatabase.watchDailyStats().first.timeout(
+      const Duration(seconds: 10),
+    );
     expect(daily.single.sessionsCount, 1);
     expect(
-      await userDatabase
-          .latestActiveSession()
-          .timeout(const Duration(seconds: 10)),
+      await userDatabase.latestActiveSession().timeout(
+        const Duration(seconds: 10),
+      ),
       isNull,
     );
 
