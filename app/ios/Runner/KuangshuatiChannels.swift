@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+// UTType 仅 iOS 14+ 可用；部署目标是 13.0，因此调用处全部用 #available 包住。
 import UniformTypeIdentifiers
 
 /// iOS 侧的原生出入口实现，与 Android 的 MainActivity 保持同名 MethodChannel。
@@ -122,10 +123,13 @@ final class KuangshuatiChannels: NSObject {
       return
     }
 
-    let picker = UIDocumentPickerViewController(
-      forExporting: [tempURL],
-      asCopy: true
-    )
+    let picker: UIDocumentPickerViewController
+    if #available(iOS 14.0, *) {
+      picker = UIDocumentPickerViewController(forExporting: [tempURL], asCopy: true)
+    } else {
+      // iOS 13 只有基于 UTI 字符串的旧 API。
+      picker = UIDocumentPickerViewController(url: tempURL, in: .exportToService)
+    }
     picker.delegate = ExportDelegate(result: result)
     // delegate 是弱引用，需由 channel 对象持有到回调结束。
     retainDelegate(picker.delegate)
@@ -133,12 +137,23 @@ final class KuangshuatiChannels: NSObject {
   }
 
   private func pick(result: @escaping FlutterResult) {
-    var types: [UTType] = [.data]
-    // 备份文件后缀是 .gkbackup，系统不认识，用 .data 兜底后按内容校验。
-    if let custom = UTType(filenameExtension: "gkbackup") {
-      types.append(custom)
+    let picker: UIDocumentPickerViewController
+    if #available(iOS 14.0, *) {
+      var types: [UTType] = [.data]
+      // 备份文件后缀是 .gkbackup，系统不认识，用 .data 兜底后按内容校验。
+      if let custom = UTType(filenameExtension: "gkbackup") {
+        types.append(custom)
+      }
+      picker = UIDocumentPickerViewController(
+        forOpeningContentTypes: types,
+        asCopy: true
+      )
+    } else {
+      picker = UIDocumentPickerViewController(
+        documentTypes: ["public.data"],
+        in: .import
+      )
     }
-    let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: true)
     picker.delegate = ImportDelegate(result: result)
     retainDelegate(picker.delegate)
     present(picker, result: result)
