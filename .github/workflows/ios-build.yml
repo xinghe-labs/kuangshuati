@@ -1,0 +1,87 @@
+name: iOS Build Check
+
+# 只做编译验证，不产出可安装包：没有签名证书时 iOS 无法出 ipa。
+# 目的是让 Swift 代码（尤其 ios/Runner/KuangshuatiChannels.swift）在真实的
+# Xcode 工具链下过一遍编译，避免长期处于「从未编译」状态。
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "app/ios/**"
+      - "app/lib/**"
+      - "app/pubspec.yaml"
+      - ".github/workflows/ios-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter 3.44.1
+        run: |
+          git clone --depth 1 --branch 3.44.1 \
+            https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Report toolchain versions
+        run: |
+          flutter --version
+          xcodebuild -version
+          pod --version
+
+      - name: Install dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Analyze Dart
+        working-directory: app
+        run: flutter analyze
+
+      # --no-codesign 跳过签名；iOS 没有 Mac 时这是唯一可行的验证方式。
+      # 构建失败会以非零退出码结束，Swift 编译错误会直接出现在日志里。
+      - name: Build iOS (no codesign)
+        working-directory: app
+        run: flutter build ios --release --no-codesign
+
+      - name: Verify the app bundle was produced
+        working-directory: app
+        run: |
+          app_path="build/ios/iphoneos/Runner.app"
+          test -d "$app_path" || {
+            echo "未生成 $app_path"
+            exit 1
+          }
+          ls -la "$app_path" | head -20
+          # 确认我们自己的 Swift 通道类真的被编进了二进制，
+          # 否则 pbxproj 注册漏了也能「构建成功」。
+          binary="$app_path/Runner"
+          test -f "$binary"
+          if ! nm -gU "$binary" 2>/dev/null | grep -q "KuangshuatiChannels"; then
+            if ! strings "$binary" | grep -q "KuangshuatiChannels"; then
+              echo "警告：二进制里没找到 KuangshuatiChannels 符号"
+              strings "$binary" | grep -c "com.kuangshuati.app/backup" || true
+            fi
+          fi
+          # MethodChannel 名字是字符串常量，一定在二进制里。
+          strings "$binary" | grep -q "com.kuangshuati.app/backup" || {
+            echo "错误：二进制中缺少 backup 通道名，Swift 代码未生效"
+            exit 1
+          }
+          echo "OK: backup 通道已编译进 Runner 二进制"
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-logs
+          path: |
+            app/build/ios/**/*.log
+            app/ios/Pods/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7
