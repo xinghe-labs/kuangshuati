@@ -54,9 +54,11 @@ abstract class ContentRepository {
   /// 取图并带原始尺寸；行内公式图需要按高度决定行内/块级渲染。
   FutureOr<ContentImage?> imageWithSize(String assetId) => null;
 
-  /// 同步取这批图的原始高度（构建阶段决定行内/块级）。
+  /// 取这批图的原始高度（构建阶段决定行内/块级）。
   /// 只查当前 markup 里出现的少量 assetId，走主键索引，开销可忽略。
-  Map<String, int> imageHeightsSync(Iterable<String> assetIds) => const {};
+  /// 声明为异步是因为 Web 端（drift WASM）只有异步查询接口。
+  Future<Map<String, int>> imageHeights(Iterable<String> assetIds) async =>
+      const {};
 
-  void close();
+  Future<void> close();
 }

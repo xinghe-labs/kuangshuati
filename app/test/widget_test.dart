@@ -34,7 +34,7 @@ class _SizedContentRepository extends SeedContentRepository {
   final Set<String> missing;
 
   @override
-  Map<String, int> imageHeightsSync(Iterable<String> assetIds) => {
+  Future<Map<String, int>> imageHeights(Iterable<String> assetIds) async => {
     for (final id in assetIds)
       if (heights.containsKey(id)) id: heights[id]!,
   };

@@ -7,10 +7,10 @@ import '../data/content/seed_content_repository.dart';
 import '../data/database/app_database.dart';
 import '../domain/models.dart';
 import '../features/backup/backup_service.dart';
-import '../features/content/content_manager.dart';
+import '../features/content/content_manager_base.dart';
 import '../features/updates/update_service.dart';
 
-final contentManagerProvider = ChangeNotifierProvider<ContentManager>((ref) {
+final contentManagerProvider = ChangeNotifierProvider<ContentManagerBase>((ref) {
   throw UnimplementedError(
     'Content manager must be initialized by the app root',
   );

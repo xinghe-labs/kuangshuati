@@ -8,7 +8,8 @@ import '../../data/database/app_database.dart';
 import '../../domain/models.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../practice/practice_launcher.dart';
-import '../updates/update_flow.dart';
+import '../settings/settings_platform_io.dart'
+    if (dart.library.js_interop) '../settings/settings_platform_web.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -22,7 +23,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) checkForAppUpdate(context, ref, manual: false);
+      if (mounted) SettingsPlatform.autoCheckUpdate(context, ref);
     });
   }
 

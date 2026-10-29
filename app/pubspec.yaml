@@ -45,8 +45,12 @@ dependencies:
   go_router: ^18.1.1
   drift: ^2.35.3
   drift_flutter: ^0.3.1
+  http: ^1.5.0
   path_provider: ^2.1.5
   sqlite3: ^3.1.2
+  # Web 端用浏览器的 DecompressionStream 解压题库包，需要直接引用 dart:js_interop
+  # 的 DOM 绑定（原先只是传递依赖）。
+  web: ^1.1.1
   # Keeps Android on the stable platform-channel implementation instead of
   # the JNI CMake toolchain currently failing under AGP 9.
   path_provider_android: 2.2.10
