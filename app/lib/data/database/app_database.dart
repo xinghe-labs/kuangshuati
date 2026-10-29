@@ -122,9 +122,16 @@ class AppSettings extends Table {
   ],
 )
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(driftDatabase(name: 'kuangshuati_user'));
+  AppDatabase() : _clock = null, super(driftDatabase(name: 'kuangshuati_user'));
 
-  AppDatabase.forTesting(super.executor);
+  AppDatabase.forTesting(super.executor, {DateTime Function()? clock})
+    : _clock = clock; // ignore: prefer_initializing_formals
+
+  /// 测试用的可控时钟：连续天数、每日统计都依赖本地自然日，
+  /// 不能靠真等一天来验证“断档”和“回拨不增加”。
+  final DateTime Function()? _clock;
+
+  DateTime _now() => (_clock ?? DateTime.now)();
 
   @override
   int get schemaVersion => 3;
@@ -183,6 +190,11 @@ class AppDatabase extends _$AppDatabase {
       batch.deleteWhere(dailyStats, (_) => const Constant(true));
       batch.deleteWhere(moduleStats, (_) => const Constant(true));
     });
+    // 连续天数是派生自练习日的汇总，清空练习记录时一并重置。
+    await setSetting('streakDays', '0');
+    await (delete(
+      appSettings,
+    )..where((row) => row.key.equals('streakLastDay'))).go();
   }
 
   Stream<PracticeSession?> watchLatestActiveSession() {
@@ -240,6 +252,62 @@ class AppDatabase extends _$AppDatabase {
     return (select(
       dailyStats,
     )..orderBy([(row) => OrderingTerm.desc(row.day)])).watch();
+  }
+
+  /// 连续练习天数与总练习天数（开发文档 §11.3）。
+  ///
+  /// 规则：以本地自然日去重；当天只有完成过至少一道已提交题目才计入；
+  /// 隔一天未练习即断档；回拨系统时间不增加连续天数。
+  Future<PracticeStreak> practiceStreak() async {
+    final totalRow = await customSelect(
+      'SELECT COUNT(*) AS n FROM daily_stats WHERE answered_count > 0',
+      readsFrom: {dailyStats},
+    ).getSingle();
+    final totalDays = totalRow.data['n'] as int? ?? 0;
+    final streakDays = int.tryParse(await getSetting('streakDays', '0')) ?? 0;
+    return PracticeStreak(
+      currentDays: totalDays == 0 ? 0 : streakDays,
+      totalDays: totalDays,
+      lastDay: await getSettingOrNull('streakLastDay'),
+    );
+  }
+
+  Stream<PracticeStreak> watchPracticeStreak() {
+    return (select(dailyStats)..orderBy([(row) => OrderingTerm.desc(row.day)]))
+        .watch()
+        .asyncMap((_) => practiceStreak());
+  }
+
+  /// 在交卷写入当日统计后推进连续天数。
+  ///
+  /// 只比较日期字符串，不依赖时钟单调：回拨到更早的日期时既不推进也不清零，
+  /// 因此回拨系统时间无法把连续天数拉高。
+  Future<void> _bumpPracticeStreak({
+    required String day,
+    required int answeredCount,
+  }) async {
+    if (answeredCount <= 0) return;
+    final lastDay = await getSettingOrNull('streakLastDay');
+    final days = int.tryParse(await getSetting('streakDays', '0')) ?? 0;
+    final next = switch (lastDay) {
+      null => 1,
+      _ when lastDay == day => days,
+      _ when lastDay.compareTo(day) > 0 => days,
+      _ when _daysBetween(lastDay, day) == 1 => days + 1,
+      _ => 1,
+    };
+    final nextLastDay = lastDay == null || day.compareTo(lastDay) > 0
+        ? day
+        : lastDay;
+    await setSetting('streakDays', '$next');
+    await setSetting('streakLastDay', nextLastDay);
+  }
+
+  static int _daysBetween(String from, String to) {
+    final start = DateTime.tryParse(from);
+    final end = DateTime.tryParse(to);
+    if (start == null || end == null) return -1;
+    return end.difference(start).inDays;
   }
 
   Stream<List<ModuleStat>> watchModuleStats() {
@@ -300,10 +368,15 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<String> getSetting(String key, String fallback) async {
+    final value = await getSettingOrNull(key);
+    return value ?? fallback;
+  }
+
+  Future<String?> getSettingOrNull(String key) async {
     final row = await (select(
       appSettings,
     )..where((item) => item.key.equals(key))).getSingleOrNull();
-    return row?.value ?? fallback;
+    return row?.value;
   }
 
   Stream<String?> watchSetting(String key) {
@@ -420,7 +493,7 @@ class AppDatabase extends _$AppDatabase {
     final answerByQuestion = {
       for (final answer in answers) answer.questionId: answer,
     };
-    final now = DateTime.now();
+    final now = _now();
     final nowMs = now.millisecondsSinceEpoch;
     var answeredCount = 0;
     var correctCount = 0;
@@ -472,6 +545,7 @@ class AppDatabase extends _$AppDatabase {
           sessionsCount: Value((daily?.sessionsCount ?? 0) + 1),
         ),
       );
+      await _bumpPracticeStreak(day: day, answeredCount: answeredCount);
 
       final moduleTotals = <String, _ModuleTotal>{};
       for (final row in questions) {

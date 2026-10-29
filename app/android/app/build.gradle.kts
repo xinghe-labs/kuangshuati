@@ -49,6 +49,12 @@ android {
             isMinifyEnabled = false
             isShrinkResources = false
         }
+        debug {
+            // 调试包用独立包名，否则 `flutter test integration_test` 会把正在用的
+            // 正式安装包卸掉（签名不一致），连带清掉用户的练习记录和离线题库。
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
     }
 }
 

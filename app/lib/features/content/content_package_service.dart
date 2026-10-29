@@ -17,9 +17,12 @@ const contentHttpProxy = String.fromEnvironment(
   'CONTENT_HTTP_PROXY',
   defaultValue: 'http://127.0.0.1:10808',
 );
+// 构建时由 `--dart-define=APP_VERSION_CODE=<pubspec 的 +N>` 注入。
+// 未注入时为 0，表示“版本未知”，此时不做门槛拦截：否则忘传 define 的
+// 正常构建会被远程清单里的最低版本号永久挡住，用户看到“版本过低”却无从更新。
 const _appVersionCode = int.fromEnvironment(
   'APP_VERSION_CODE',
-  defaultValue: 1,
+  defaultValue: 0,
 );
 
 class ContentPackageException implements Exception {
@@ -95,7 +98,7 @@ class ContentPackageManifest {
       decoded['minimumAppVersionCode'],
       'minimumAppVersionCode',
     );
-    if (_appVersionCode < minimumAppVersionCode) {
+    if (_appVersionCode > 0 && _appVersionCode < minimumAppVersionCode) {
       throw ContentPackageException(
         '当前应用版本过低，请先更新应用（需要版本号 $minimumAppVersionCode）',
       );
@@ -147,14 +150,41 @@ class ContentPackageService {
     this.proxy = contentHttpProxy,
     this._supportDirectory,
     this._temporaryDirectory,
-    this.segmentCount = 6,
-  });
+    int? segmentCount,
+  }) : segmentCount = segmentCount ?? _diagnosticSegments;
+
+  /// 构建时用 `--dart-define=CONTENT_SEGMENTS=N` 强制指定分片数。
+  /// 默认 0 = 不指定，走按包大小自动分片。留着是为了能在真机上
+  /// 对不同网络做 A/B 实测，而不是凭感觉调常量。
+  static const int _diagnosticSegmentCount = int.fromEnvironment(
+    'CONTENT_SEGMENTS',
+    defaultValue: 0,
+  );
+
+  static int? get _diagnosticSegments =>
+      _diagnosticSegmentCount > 0 ? _diagnosticSegmentCount : null;
+
+  /// 每片最小字节数：分片太小会让请求数暴涨，收益却为零。
+  static const int minimumChunkBytes = 6 * 1024 * 1024;
+
+  /// 自动分片的上限。145MB 的线上包按 6MB 切片得到 25 片，夹到 24 片。
+  static const int maxAutoSegments = 24;
+
+  /// 同时进行的分片请求数。
+  ///
+  /// 实测（对同一个 R2 源拉 20MB）：2 路 0.27MB/s、6 路 0.45、10 路 0.84、
+  /// 18 路 0.99、24 路 1.54 — 单连接被限速，并发数直接换带宽，
+  /// 16~24 路之后才趋于平稳。真机上 10 路时只用掉一半带宽，所以取 16。
+  static const int maxConcurrentSegments = 16;
 
   final String manifestUrl;
   final String proxy;
   final Directory? _supportDirectory;
   final Directory? _temporaryDirectory;
-  final int segmentCount;
+
+  /// 手动指定的分片数；为 null 时按包大小自动决定（生产路径）。
+  /// 测试里指定小数字就能在小包上验证多分片逻辑。
+  final int? segmentCount;
 
   Future<Directory> get _support async =>
       _supportDirectory ?? await getApplicationSupportDirectory();
@@ -231,8 +261,9 @@ class ContentPackageService {
     ContentPackageManifest manifest, {
     required void Function(double progress, String stage) onProgress,
   }) async {
-    if (segmentCount < 1 || segmentCount > 8) {
-      throw const ContentPackageException('题库下载分片数必须在 1 到 8 之间');
+    final segmentTotal = _effectiveSegmentCount(manifest.packageBytes);
+    if (segmentCount != null && (segmentTotal < 1 || segmentTotal > 32)) {
+      throw const ContentPackageException('题库下载分片数必须在 1 到 32 之间');
     }
     final support = await _support;
     final temporary = await _temporary;
@@ -267,6 +298,7 @@ class ContentPackageService {
       final segments = await _downloadSegments(
         manifest,
         downloadDirectory,
+        segments: segmentTotal,
         onProgress: (progress) => onProgress(progress * 0.8, '正在下载题库'),
       );
       onProgress(0.82, '正在校验题库压缩包');
@@ -326,9 +358,26 @@ class ContentPackageService {
     }
   }
 
+  /// 分片数：显式指定优先，否则按包大小自动决定。
+  /// 小包少切（避免一堆几百 KB 的请求），大包最多 [maxAutoSegments] 片。
+  int _effectiveSegmentCount(int packageBytes) {
+    final explicit = segmentCount;
+    if (explicit != null) return explicit;
+    return segmentCountForBytes(packageBytes);
+  }
+
+  /// 按包大小算分片数。公开出来是为了能在单测里直接断言切分策略，
+  /// 而不用造一个 347MB 的假包。
+  static int segmentCountForBytes(int packageBytes) {
+    if (packageBytes <= 0) return 1;
+    final bySize = (packageBytes / minimumChunkBytes).ceil();
+    return bySize.clamp(1, maxAutoSegments);
+  }
+
   Future<List<File>> _downloadSegments(
     ContentPackageManifest manifest,
     Directory directory, {
+    required int segments,
     required void Function(double progress) onProgress,
   }) async {
     final metadataFile = File(
@@ -341,7 +390,7 @@ class ContentPackageService {
         resume =
             metadata['packageSha256'] == manifest.packageSha256 &&
             metadata['packageBytes'] == manifest.packageBytes &&
-            metadata['segmentCount'] == segmentCount;
+            metadata['segmentCount'] == segments;
       } on Exception {
         resume = false;
       }
@@ -354,12 +403,12 @@ class ContentPackageService {
       jsonEncode({
         'packageSha256': manifest.packageSha256,
         'packageBytes': manifest.packageBytes,
-        'segmentCount': segmentCount,
+        'segmentCount': segments,
       }),
       flush: true,
     );
 
-    final chunks = _segmentRanges(manifest.packageBytes, segmentCount);
+    final chunks = _segmentRanges(manifest.packageBytes, segments);
     final files = <File>[];
     final downloaded = <int>[];
     for (var index = 0; index < chunks.length; index++) {
@@ -381,27 +430,42 @@ class ContentPackageService {
     }
 
     report();
-    await Future.wait([
-      for (var index = 0; index < chunks.length; index++)
-        _downloadSegment(
+    // 连接数封顶在 [maxConcurrentSegments]：分片总数可以更多，
+    // 先下完的连接立刻接下一片，免得最后几片拖成一条尾巴。
+    // 下面先读后写 next 之间没有 await，Dart 单线程下不会重复分配同一片。
+    final workers = segments < maxConcurrentSegments
+        ? segments
+        : maxConcurrentSegments;
+    var next = 0;
+    Future<void> worker() async {
+      while (true) {
+        final index = next;
+        if (index >= chunks.length) return;
+        next = index + 1;
+        await _downloadSegment(
           manifest,
           chunks[index],
           files[index],
           downloaded,
           index,
           report,
-        ),
-    ]);
+        );
+      }
+    }
+
+    await Future.wait([for (var i = 0; i < workers; i++) worker()]);
     report();
     return files;
   }
 
   List<({int start, int end})> _segmentRanges(int bytes, int count) {
+    // 小包上指定了过多分片时退化为按字节切，避免出现 end < start 的空片。
+    final total = count > bytes ? bytes : count;
     final ranges = <({int start, int end})>[];
-    final base = bytes ~/ count;
+    final base = bytes ~/ total;
     var start = 0;
-    for (var index = 0; index < count; index++) {
-      final end = index == count - 1 ? bytes - 1 : start + base - 1;
+    for (var index = 0; index < total; index++) {
+      final end = index == total - 1 ? bytes - 1 : start + base - 1;
       ranges.add((start: start, end: end));
       start = end + 1;
     }

@@ -54,6 +54,7 @@ class QuestionContent {
     required this.id,
     required this.paperId,
     required this.questionNo,
+    required this.sequence,
     required this.module,
     required this.stem,
     required this.options,
@@ -61,11 +62,19 @@ class QuestionContent {
     required this.solution,
     this.material,
     this.searchStem,
+    this.groupId = '',
   });
 
   final String id;
   final String paperId;
+
+  /// 原卷里的题号。一份卷子分多个模块时，每个模块的题号都从 1 重新数，
+  /// 所以它不是卷内唯一位置，只用于回溯原卷。
   final int questionNo;
+
+  /// 卷内顺序号（1..N，按原文档顺序），唯一且可用于展示“第 N 题”。
+  final int sequence;
+
   final String module;
   final String stem;
   final Map<String, String> options;
@@ -73,6 +82,10 @@ class QuestionContent {
   final String solution;
   final String? material;
   final String? searchStem;
+
+  /// 材料组 ID：同一段材料下的小题共享它。抽题时整组取，不能拆散。
+  /// 演示数据集没有分组信息时为空串。
+  final String groupId;
 
   String get plainStem {
     final indexed = searchStem?.trim();
@@ -122,4 +135,24 @@ class SessionAnswer {
   final bool? isCorrect;
   final int durationMs;
   final bool uncertain;
+}
+
+/// 练习天数汇总（开发文档 §11.3）：总练习天数与连续练习天数。
+class PracticeStreak {
+  const PracticeStreak({
+    required this.currentDays,
+    required this.totalDays,
+    this.lastDay,
+  });
+
+  static const empty = PracticeStreak(currentDays: 0, totalDays: 0);
+
+  /// 连续练习天数。
+  final int currentDays;
+
+  /// 累计练习天数（按自然日去重）。
+  final int totalDays;
+
+  /// 最近一次计入的本地自然日，格式 `YYYY-MM-DD`。
+  final String? lastDay;
 }
