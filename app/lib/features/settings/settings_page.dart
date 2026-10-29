@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
-import '../backup/backup_page.dart';
 import '../content/content_install_page.dart';
-import '../updates/update_flow.dart';
+import 'settings_platform_io.dart'
+    if (dart.library.js_interop) 'settings_platform_web.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -25,10 +25,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _loadVersion() async {
-    final version = await ref.read(updateServiceProvider).currentVersion();
+    final label = await SettingsPlatform.versionLabel(ref);
     if (!mounted) return;
     setState(() {
-      _versionLabel = '${version.name} (${version.code})';
+      _versionLabel = label;
     });
   }
 
@@ -122,18 +122,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
             ),
             _divider,
-            _SettingTile(
-              icon: Icons.backup_outlined,
-              title: '备份与恢复',
-              subtitle: '导出或恢复练习记录，换机、重装不丢进度',
-              trailing: const Icon(Icons.chevron_right, size: 20),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (context) => const BackupPage(),
-                ),
+            for (final action in SettingsPlatform.dataActions()) ...[
+              _SettingTile(
+                icon: action.icon,
+                title: action.title,
+                subtitle: action.subtitle,
+                trailing: const Icon(Icons.chevron_right, size: 20),
+                onTap: () => action.onTap(context, ref),
               ),
-            ),
-            _divider,
+              _divider,
+            ],
             _SettingTile(
               icon: Icons.delete_sweep_outlined,
               title: '清空练习记录',
@@ -144,8 +142,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _divider,
             _SettingTile(
               icon: Icons.phone_android,
-              title: '本机存储',
-              subtitle: '练习记录只保存在这台设备，可随时导出备份，不联网上传',
+              title: SettingsPlatform.storageNoteTitle,
+              subtitle: SettingsPlatform.storageNote,
             ),
           ],
         ),
@@ -153,14 +151,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         const SectionHeading(title: '关于'),
         _GroupCard(
           children: [
-            _SettingTile(
-              icon: Icons.system_update_alt,
-              title: '检查更新',
-              subtitle: '启动时自动检查，也支持手动检查',
-              trailing: const Icon(Icons.chevron_right, size: 20),
-              onTap: () => checkForAppUpdate(context, ref, manual: true),
-            ),
-            _divider,
+            for (final action in SettingsPlatform.aboutActions()) ...[
+              _SettingTile(
+                icon: action.icon,
+                title: action.title,
+                subtitle: action.subtitle,
+                trailing: const Icon(Icons.chevron_right, size: 20),
+                onTap: () => action.onTap(context, ref),
+              ),
+              _divider,
+            ],
             _SettingTile(
               icon: Icons.info_outline,
               title: '狂刷题',

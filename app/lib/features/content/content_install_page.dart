@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
-import 'content_manager.dart';
+import 'content_manager_base.dart';
 
 class ContentInstallPage extends ConsumerStatefulWidget {
   const ContentInstallPage({super.key});
@@ -27,7 +27,7 @@ class _ContentInstallPageState extends ConsumerState<ContentInstallPage> {
   void _checkManifestIfNeeded() {
     final manager = ref.read(contentManagerProvider);
     if (manager.phase == ContentManagerPhase.downloading) return;
-    if (manager.availableManifest == null) {
+    if (!manager.hasManifest) {
       manager.checkForManifest();
     }
     // 未安装题库时进入页面自动开始下载，下载进度照常展示。
@@ -40,7 +40,7 @@ class _ContentInstallPageState extends ConsumerState<ContentInstallPage> {
   @override
   Widget build(BuildContext context) {
     final manager = ref.watch(contentManagerProvider);
-    final manifest = manager.availableManifest;
+    final manifest = manager.hasManifest;
     final downloading = manager.phase == ContentManagerPhase.downloading;
     final checking = manager.phase == ContentManagerPhase.checking;
     return Scaffold(
@@ -114,15 +114,15 @@ class _ContentInstallPageState extends ConsumerState<ContentInstallPage> {
                   FilledButton(
                     onPressed: checking || downloading
                         ? null
-                        : manifest == null
-                        ? manager.checkForManifest
-                        : manager.downloadAndInstall,
+                        : manifest
+                        ? manager.downloadAndInstall
+                        : manager.checkForManifest,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 13),
                       child: Text(
                         downloading
                             ? '正在下载'
-                            : manifest == null
+                            : !manifest
                             ? '重新检查'
                             : manager.hasFullContent
                             ? '下载并更新'

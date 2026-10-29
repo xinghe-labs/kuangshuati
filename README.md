@@ -68,17 +68,23 @@ flutter run
 当前已验证：
 
 - `flutter analyze` 无问题。
-- 13 个本地组件、数据库、真实资产和更新下载校验测试全部通过。
+- 46 个本地单元测试全部通过（组件、数据库、真实资产、备份/恢复、更新下载校验）。
 - 真机 真机集成测试通过，实际加载 58,890 道题、515 份试卷。
 - 正式 release APK 已在 真机 冷启动通过，3.2 秒完成首屏并加载全量题库。
 - 题图从 SQLite BLOB 读取并完成 Flutter 图片解码测试。
 - Release APK 约 197 MiB，APK v2 签名与 4 字节对齐验证通过；完整题库分片约 298 MiB。
+- Web 端（`flutter build web -t lib/main_web.dart`）：浏览器内装入 187 MB 核心题库，六种练习模式全部实测可进入（`artifacts/web-modes-e2e.cjs` 11/11），答题/刷新恢复/错题入册/缓存复用实测通过（`artifacts/web-ui-e2e.cjs` 10/10、`artifacts/web-wrong-e2e.cjs` 7/7、`artifacts/web-e2e.cjs` 5/5）。
 
 ## 当前不包含
 
-- iOS 签名、Windows/Web 发布包和商店上架流程。
-- 题库内容包独立下载、断点续传和版本切换。
-- 题库公开分发授权和正式 HTTPS 更新源。
+- iOS 签名、Windows 桌面端发布包和商店上架流程（Windows 本机缺 Visual Studio 构建链，iOS 需 macOS）。
+- 题库公开分发授权和正式 HTTPS 更新源（R2 更新源已搭建，上线发布待确认）。
+
+## 如何运行
+
+- Android：`release/` 目录有签名 APK，直接安装后下载数据包即可。
+- Web：`flutter build web -t lib/main_web.dart` 后本地静态托管 `app/build/web`（需带 `Cross-Origin-Opener-Policy: same-origin` 和 `Cross-Origin-Embedder-Policy: require-corp` 响应头），首次打开自动下载题库到浏览器。
+- Windows/iOS：见「当前不包含」。
 
 Android APK 的签名、发布和自动更新流程见 [release/README.md](release/README.md)。源码保存在私有仓库，`.github/workflows/android-release.yml` 会把签名 APK 和更新清单发布到公开只读的 S3 兼容对象存储。
 
