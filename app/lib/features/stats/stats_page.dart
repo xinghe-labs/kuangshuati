@@ -9,6 +9,30 @@ import '../../domain/models.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../practice/practice_launcher.dart';
 
+/// 「模块弱项」的最小样本量（开发文档 §11.1）：已作答不足 10 道的模块只标“数据较少”，
+/// 不参与弱项评选，避免“3 题错 1 题”被当成薄弱模块。
+const int kWeakModuleMinAnswered = 10;
+
+/// 一组练习的默认题量（requirements-discovery Q18：默认 20 题）。
+const int kDefaultPracticeCount = 20;
+
+/// 选出最需要补强的模块（开发文档 §11.1）。
+///
+/// 已作答不足 [kWeakModuleMinAnswered] 道的模块不参与评选，
+/// 避免“3 题错 1 题”被说成薄弱模块；没有合格模块时返回 null。
+ModuleStat? weakestModule(List<ModuleStat> modules) {
+  final eligible =
+      modules
+          .where((item) => item.answeredCount >= kWeakModuleMinAnswered)
+          .toList()
+        ..sort((a, b) {
+          final aRate = a.correctCount / a.answeredCount;
+          final bRate = b.correctCount / b.answeredCount;
+          return aRate.compareTo(bRate);
+        });
+  return eligible.isEmpty ? null : eligible.first;
+}
+
 /// 错题本状态卡：复习中/今日到期/已掌握，到期时点击直达错题页。
 class _ReviewCard extends ConsumerWidget {
   const _ReviewCard();
@@ -117,6 +141,7 @@ class StatsPage extends ConsumerWidget {
     final dailyState = ref.watch(dailyStatsProvider);
     final moduleState = ref.watch(moduleStatsProvider);
     final reviews = ref.watch(reviewItemsProvider);
+    final streak = ref.watch(practiceStreakProvider);
 
     return AppPage(
       children: [
@@ -151,6 +176,18 @@ class StatsPage extends ConsumerWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 10),
+                // 开发文档 §11.3：连续天数按本地自然日去重，隔一天即断档。
+                MetricStrip(
+                  items: [
+                    MetricItem(
+                      '连续练习',
+                      '${streak.value?.currentDays ?? 0}',
+                      '天',
+                    ),
+                    MetricItem('累计练习', '${streak.value?.totalDays ?? 0}', '天'),
+                  ],
+                ),
               ],
             );
           },
@@ -164,6 +201,7 @@ class StatsPage extends ConsumerWidget {
           loading: () => const LinearProgressIndicator(minHeight: 2),
           error: (error, stack) => Text('读取模块统计失败：$error'),
           data: (modules) {
+            // 开发文档 §11.1：少于 10 道实际作答的模块不给出正确率，只标“数据较少”。
             final active = modules
                 .where((item) => item.answeredCount > 0)
                 .toList();
@@ -188,13 +226,8 @@ class StatsPage extends ConsumerWidget {
           loading: () => const SizedBox.shrink(),
           error: (error, stack) => Text('读取建议失败：$error'),
           data: (modules) {
-            final active =
-                modules.where((item) => item.answeredCount > 0).toList()
-                  ..sort((a, b) {
-                    final aRate = a.correctCount / a.answeredCount;
-                    final bRate = b.correctCount / b.answeredCount;
-                    return aRate.compareTo(bRate);
-                  });
+            // 弱项只在样本量够（至少 10 道已作答）的模块里选，避免“3 题错 1 题”被说成弱项。
+            final weak = weakestModule(modules);
             final due =
                 reviews.value
                     ?.where(
@@ -206,7 +239,6 @@ class StatsPage extends ConsumerWidget {
                     )
                     .length ??
                 0;
-            final weak = active.isEmpty ? null : active.first;
             return Container(
               padding: const EdgeInsets.all(16),
               decoration: const BoxDecoration(
@@ -227,7 +259,7 @@ class StatsPage extends ConsumerWidget {
                   const SizedBox(height: 7),
                   Text(
                     weak == null
-                        ? '先完成一组 10 题，建立你的第一份能力画像。'
+                        ? '先完成一组 20 题，建立你的第一份能力画像。'
                         : due > 0
                         ? '先清掉 $due 道到期错题，再针对“${weak.module}”做一组短练习。'
                         : '当前最需要补强的是“${weak.module}”，正确率 ${(weak.correctCount * 100 / weak.answeredCount).round()}%。',
@@ -264,9 +296,10 @@ class StatsPage extends ConsumerWidget {
     WidgetRef ref,
     String module,
   ) async {
+    // 弱项入口与首页一致：一组默认 20 题（requirements-discovery Q18/Q19）。
     final questions = await ref
         .read(contentRepositoryProvider)
-        .randomQuestions(10, module: module);
+        .randomQuestions(kDefaultPracticeCount, module: module);
     if (!context.mounted) return;
     await launchPractice(
       context,
@@ -274,7 +307,7 @@ class StatsPage extends ConsumerWidget {
       mode: PracticeMode.custom,
       title: '$module · 定向练习',
       questions: questions,
-      requestedCount: 10,
+      requestedCount: kDefaultPracticeCount,
     );
   }
 }
@@ -287,6 +320,7 @@ class _ModuleRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rate = module.correctCount / module.answeredCount;
+    final enough = module.answeredCount >= kWeakModuleMinAnswered;
     return Container(
       padding: const EdgeInsets.all(14),
       color: AppColors.surface,
@@ -301,10 +335,10 @@ class _ModuleRow extends StatelessWidget {
                 ),
               ),
               Text(
-                '${(rate * 100).round()}%',
-                style: const TextStyle(
-                  color: AppColors.ink,
-                  fontSize: 17,
+                enough ? '${(rate * 100).round()}%' : '数据较少',
+                style: TextStyle(
+                  color: enough ? AppColors.ink : AppColors.muted,
+                  fontSize: enough ? 17 : 13,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -314,10 +348,12 @@ class _ModuleRow extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(2),
             child: LinearProgressIndicator(
-              value: rate.clamp(0, 1),
+              value: enough ? rate.clamp(0, 1) : 0,
               minHeight: 5,
               backgroundColor: AppColors.softFill,
-              valueColor: const AlwaysStoppedAnimation(AppColors.ink),
+              valueColor: AlwaysStoppedAnimation(
+                enough ? AppColors.ink : AppColors.softFill,
+              ),
             ),
           ),
           const SizedBox(height: 7),
@@ -329,7 +365,9 @@ class _ModuleRow extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                '${(module.durationMs / 60000).round()} 分钟',
+                enough
+                    ? '${(module.durationMs / 60000).round()} 分钟'
+                    : '再做 ${kWeakModuleMinAnswered - module.answeredCount} 题后看正确率',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],

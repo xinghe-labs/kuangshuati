@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../data/content/content_repository.dart';
 import '../data/content/seed_content_repository.dart';
 import '../data/database/app_database.dart';
 import '../domain/models.dart';
+import '../features/backup/backup_service.dart';
 import '../features/content/content_manager.dart';
 import '../features/updates/update_service.dart';
 
@@ -56,6 +58,29 @@ final dailyStatsProvider = StreamProvider<List<DailyStat>>((ref) {
 
 final moduleStatsProvider = StreamProvider<List<ModuleStat>>((ref) {
   return ref.watch(databaseProvider).watchModuleStats();
+});
+
+final practiceStreakProvider = StreamProvider<PracticeStreak>((ref) {
+  return ref.watch(databaseProvider).watchPracticeStreak();
+});
+
+final backupServiceProvider = Provider<BackupService>((ref) {
+  return BackupService(
+    database: ref.watch(databaseProvider),
+    directoryOf: getApplicationDocumentsDirectory,
+    appVersionLabel: () async {
+      final version = await ref.read(updateServiceProvider).currentVersion();
+      return '${version.name} (${version.code})';
+    },
+    contentInfo: () async {
+      final stats = await ref.read(contentRepositoryProvider).stats();
+      return {
+        'contentVersion': stats.contentVersion,
+        'questionCount': stats.questionCount,
+        'paperCount': stats.paperCount,
+      };
+    },
+  );
 });
 
 final fontScaleProvider = StreamProvider<double>((ref) {

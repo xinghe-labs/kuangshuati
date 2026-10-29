@@ -85,7 +85,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
             _ActionTile(
               index: '02',
-              title: '随机 10 题',
+              title: '随机 20 题',
               detail: '一组短练习，适合碎片时间',
               icon: Icons.shuffle,
               onTap: () => _startRandom(context, ref),
@@ -130,7 +130,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Future<void> _startRandom(BuildContext context, WidgetRef ref) async {
-    final questions = await randomQuestions(ref, 10);
+    final questions = await randomQuestions(ref, 20);
     if (!context.mounted) return;
     await launchPractice(
       context,
@@ -138,7 +138,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       mode: PracticeMode.random,
       title: '随机练习',
       questions: questions,
-      requestedCount: 10,
+      requestedCount: 20,
     );
   }
 
@@ -267,7 +267,7 @@ class _StartPanel extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            '先做一组 10 题，系统会从第一道错题开始安排复习。',
+            '先做一组 20 题，系统会从第一道错题开始安排复习。',
             style: TextStyle(color: Color(0xFFC9C9C3), fontSize: 13),
           ),
           const SizedBox(height: 16),

@@ -7,11 +7,16 @@ import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/content/content_repository.dart' as repo;
 
-/// 行内/块级分流阈值（逻辑像素）。依据：用户 m08325–m08335 的修复方向。
+/// 行内/块级分流阈值（逻辑像素）。
 /// - 图高 ≤ [_kInlineImageMaxHeight]：行内，与文字同基线混排，按字号缩放。
+/// - 夹在句中（前后同一行都有文字）且图高 ≤ [_kInlineImageContextMaxHeight]：
+///   也算行内——双行公式、带上下标的公式图高 41–60，只按阈值会被误判成块级。
 /// - 图高 > [_kBlockImageMaxHeight]：块级居中，最大高度放宽到 380。
 /// - 其余：块级左对齐，无灰底，点击放大。
 const _kInlineImageMaxHeight = 40.0;
+
+/// 句中图行内上限：约 2.6 倍行高，再高会把整段行距搅乱，仍按块级。
+const _kInlineImageContextMaxHeight = 72.0;
 const _kBlockImageMaxHeight = 200.0;
 
 /// 行内图缩放基准：公式图设计高度 28px 对应 fontSize 15。
@@ -39,6 +44,8 @@ class RichContent extends ConsumerWidget {
               .where((segment) => segment.assetId != null)
               .map((segment) => segment.assetId!),
         );
+    // 行内判定：阈值内，或夹在句中（前后同一行都有文字）且高度不超句中上限。
+    final inlineFlags = _resolveInlineFlags(segments, heights);
 
     // 文字与行内图必须同处一个 TextSpan 流，否则每张公式图都会独占一行。
     final paragraphs = <Widget>[];
@@ -70,14 +77,15 @@ class RichContent extends ConsumerWidget {
       blockImages.clear();
     }
 
-    for (final segment in segments) {
+    for (var index = 0; index < segments.length; index++) {
+      final segment = segments[index];
       if (segment.assetId == null) {
         flushImages();
         // 段内单换行保留为换行，空行切成新段落并保留段落间距。
         final parts = segment.text.split(RegExp(r'\n{2,}'));
-        for (var index = 0; index < parts.length; index++) {
-          if (index > 0) flushInline();
-          final part = parts[index].trim();
+        for (var partIndex = 0; partIndex < parts.length; partIndex++) {
+          if (partIndex > 0) flushInline();
+          final part = parts[partIndex].trim();
           if (part.isEmpty) continue;
           // 不插空格：原 markup 中 PUA 标记就紧贴中文，公式需与文字相连。
           inlineSpans.add(TextSpan(text: part));
@@ -85,15 +93,13 @@ class RichContent extends ConsumerWidget {
         continue;
       }
       final knownHeight = heights[segment.assetId] ?? segment.height;
-      if (knownHeight != null &&
-          knownHeight > 0 &&
-          knownHeight <= _kInlineImageMaxHeight) {
+      if (inlineFlags[index]) {
         flushImages();
         // 行内图：去灰底、去全宽，按字号缩放与文字同基线。
         final scale = baseStyle.fontSize != null
             ? baseStyle.fontSize! / _kInlineDesignFontSize
             : 1.0;
-        final inlineHeight = knownHeight * scale;
+        final inlineHeight = (knownHeight ?? _kInlineDesignFontSize) * scale;
         inlineSpans.add(
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
@@ -124,6 +130,47 @@ class RichContent extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// 逐张图判定行内还是块级。
+/// 只靠高度阈值不够：多行公式、带上下标的公式图高 41–60，在原文里是句中成分，
+/// 单独成行会把句子切断。所以再给一条“夹在句中”的豁免。
+List<bool> _resolveInlineFlags(
+  List<_Segment> segments,
+  Map<String, int> heights,
+) {
+  bool hasTextBefore(int index) {
+    if (index == 0) return false;
+    final previous = segments[index - 1];
+    if (previous.assetId != null) return false;
+    if (previous.text.trim().isEmpty) return false;
+    return !previous.text.endsWith('\n');
+  }
+
+  bool hasTextAfter(int index) {
+    if (index == segments.length - 1) return false;
+    final next = segments[index + 1];
+    if (next.assetId != null) return false;
+    if (next.text.trim().isEmpty) return false;
+    return !next.text.startsWith('\n');
+  }
+
+  final flags = List<bool>.filled(segments.length, false);
+  for (var index = 0; index < segments.length; index++) {
+    final assetId = segments[index].assetId;
+    if (assetId == null) continue;
+    final height = heights[assetId] ?? segments[index].height;
+    if (height == null || height <= 0) continue;
+    if (height <= _kInlineImageMaxHeight) {
+      flags[index] = true;
+      continue;
+    }
+    flags[index] =
+        height <= _kInlineImageContextMaxHeight &&
+        hasTextBefore(index) &&
+        hasTextAfter(index);
+  }
+  return flags;
 }
 
 /// 行内小图：无灰底、按目标高度等比缩放，点击放大。

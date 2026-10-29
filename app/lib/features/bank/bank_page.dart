@@ -166,10 +166,7 @@ class _PaperList extends ConsumerWidget {
         if (filtered.isEmpty) {
           return ListView(
             children: const [
-              AppEmptyState(
-                title: '没有匹配的试卷',
-                message: '换一个年份、地区或试卷名称试试。',
-              ),
+              AppEmptyState(title: '没有匹配的试卷', message: '换一个年份、地区或试卷名称试试。'),
             ],
           );
         }
@@ -321,7 +318,7 @@ class _FavoriteList extends ConsumerWidget {
                         subtitle: Padding(
                           padding: const EdgeInsets.only(top: 5),
                           child: Text(
-                            '${question.module} · 第 ${question.questionNo} 题',
+                            '${question.module} · 第 ${question.sequence} 题',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),

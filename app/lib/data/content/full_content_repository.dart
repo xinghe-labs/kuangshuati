@@ -159,17 +159,68 @@ class FullContentRepository implements ContentRepository {
     int count, {
     String? module,
   }) async {
-    final rows = _database.select(
+    if (count <= 0) return const <QuestionContent>[];
+    // 开发文档 §9.1 要求“材料组作为抽题最小单位”。但真实题库里有两类例外，
+    // 都按单题抽，否则会一次抽出整库或整节：
+    //   1) 43 904 道题的上游 groupId 为空，全部塔缩成一个伪组（group_id=''）；
+    //   2) 存在 35/50/60 题的超大材料组，装不进 20 题练习。
+    // 只有“整组能完整装进本次题量”的材料组才整组抽。
+    final units = _database.select(
       '''
-      SELECT *
+      SELECT group_id, COUNT(*) AS n
       FROM questions
-      WHERE (? IS NULL OR module = ?)
+      WHERE (? IS NULL OR module = ?) AND group_id <> ''
+      GROUP BY group_id
+      HAVING COUNT(*) <= ?
       ORDER BY RANDOM()
-      LIMIT ?
       ''',
       [module, module, count],
     );
-    return rows.map(_questionFromRow).toList(growable: false);
+    final chosenGroups = <String>[];
+    var planned = 0;
+    for (final row in units) {
+      if (planned >= count) break;
+      chosenGroups.add(row['group_id'] as String);
+      planned += row['n'] as int;
+    }
+    final picked = <QuestionContent>[];
+    if (chosenGroups.isNotEmpty) {
+      final placeholders = List.filled(chosenGroups.length, '?').join(', ');
+      picked.addAll(
+        _database
+            .select(
+              '''
+              SELECT *
+              FROM questions
+              WHERE group_id IN ($placeholders) AND (? IS NULL OR module = ?)
+              ORDER BY group_id, sequence, question_no
+              ''',
+              [...chosenGroups, module, module],
+            )
+            .map(_questionFromRow),
+      );
+    }
+    if (picked.length < count) {
+      // 剩余的由无材料分组的单题和装不进本组练习的大组补足，逐个随机。
+      final exclude = chosenGroups.isEmpty
+          ? ''
+          : 'AND group_id NOT IN (${List.filled(chosenGroups.length, '?').join(', ')})';
+      picked.addAll(
+        _database
+            .select(
+              '''
+              SELECT *
+              FROM questions
+              WHERE (? IS NULL OR module = ?) $exclude
+              ORDER BY RANDOM()
+              LIMIT ?
+              ''',
+              [module, module, ...chosenGroups, count - picked.length],
+            )
+            .map(_questionFromRow),
+      );
+    }
+    return picked;
   }
 
   @override
@@ -266,6 +317,7 @@ class FullContentRepository implements ContentRepository {
       id: row['id'] as String,
       paperId: row['paper_id'] as String,
       questionNo: row['question_no'] as int,
+      sequence: row['sequence'] as int,
       module: row['module'] as String,
       stem: row['stem_markup'] as String,
       options: options,
@@ -273,6 +325,7 @@ class FullContentRepository implements ContentRepository {
       solution: row['solution_markup'] as String,
       material: material?.isNotEmpty == true ? material : null,
       searchStem: row['stem_text'] as String?,
+      groupId: row['group_id'] as String? ?? '',
     );
   }
 

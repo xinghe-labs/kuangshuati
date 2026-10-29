@@ -8,6 +8,25 @@ import '../../data/content/full_content_repository.dart';
 import '../../data/content/seed_content_repository.dart';
 import 'content_package_service.dart';
 
+/// 把底层异常翻成用户能看懂的一句话。
+///
+/// 直接展示 `SocketException: Connection refused ... errno = 111`
+/// 只会让用户困惑（还会暴露本机代理端口），而真正需要它的人只看日志。
+String friendlyContentError(Object error) {
+  if (error is ContentPackageException) {
+    return error.message;
+  }
+  if (error is SocketException ||
+      error is HandshakeException ||
+      error is HttpException) {
+    return '网络不可用或连接被打断，请检查网络后重试。';
+  }
+  if (error is FileSystemException) {
+    return '本机存储不可写或空间不足，请清理空间后重试。';
+  }
+  return '题库处理失败，请重试。';
+}
+
 enum ContentManagerPhase { checking, needsDownload, downloading, ready, failed }
 
 class ContentManager extends ChangeNotifier {
@@ -41,7 +60,9 @@ class ContentManager extends ChangeNotifier {
   double _progress = 0;
   String _stage = '正在检查离线题库';
   String? _errorMessage;
+  String? _errorDetail;
   bool _manifestCheckStarted = false;
+  bool _disposed = false;
 
   ContentRepository get repository => _repository;
 
@@ -57,6 +78,9 @@ class ContentManager extends ChangeNotifier {
 
   String? get errorMessage => _errorMessage;
 
+  /// 底层异常原文，只在调试构建里展示，发布版只给用户看 [errorMessage]。
+  String? get errorDetail => _errorDetail;
+
   bool get hasFullContent => _fullRepository != null;
 
   bool get updateAvailable =>
@@ -70,6 +94,13 @@ class ContentManager extends ChangeNotifier {
       throw const ContentPackageException('测试内容管理器未配置题库下载服务');
     }
     return service;
+  }
+
+  /// 把异常存成「用户能看懂的一句 + 调试用的原文」。
+  void _rememberError(Object error) {
+    debugPrint('ContentManager error: $error');
+    _errorMessage = friendlyContentError(error);
+    _errorDetail = error.toString();
   }
 
   static Future<ContentManager> create({
@@ -103,7 +134,8 @@ class ContentManager extends ChangeNotifier {
           notifyListeners();
           return;
         } on Object catch (error) {
-          _errorMessage = '已安装题库损坏：$error';
+          _errorDetail = error.toString();
+          _errorMessage = '已安装的离线题库损坏，需要重新下载。';
         }
       }
       _phase = ContentManagerPhase.needsDownload;
@@ -112,7 +144,7 @@ class ContentManager extends ChangeNotifier {
     } on Object catch (error) {
       _phase = ContentManagerPhase.failed;
       _stage = '无法检查离线题库';
-      _errorMessage = error.toString();
+      _rememberError(error);
       notifyListeners();
     }
   }
@@ -145,7 +177,7 @@ class ContentManager extends ChangeNotifier {
         _phase = ContentManagerPhase.failed;
         _stage = '无法获取题库下载信息';
       }
-      _errorMessage = error.toString();
+      _rememberError(error);
     }
     notifyListeners();
   }
@@ -186,7 +218,7 @@ class ContentManager extends ChangeNotifier {
       notifyListeners();
       return true;
     } on Object catch (error) {
-      _errorMessage = error.toString();
+      _rememberError(error);
       try {
         _fullRepository = await FullContentRepository.openInstalled(
           supportDirectory: _supportDirectory,
@@ -218,15 +250,28 @@ class ContentManager extends ChangeNotifier {
     } on Object catch (error) {
       _repository = _seedRepository;
       _phase = ContentManagerPhase.failed;
-      _errorMessage = error.toString();
+      _rememberError(error);
     }
     notifyListeners();
   }
 
   @override
   void dispose() {
+    // contentManagerProvider 是 ChangeNotifierProvider：容器销毁时会自动
+    // dispose 一次，而 main.dart 里又挂了 ref.onDispose(manager.dispose)，
+    // 于是会二次 dispose 并触发 “used after being disposed” 断言。
+    if (_disposed) return;
+    _disposed = true;
     _fullRepository?.close();
     _fullRepository = null;
     super.dispose();
+  }
+
+  /// 下载是异步的，Provider/页面可能先被销毁（退出、热重启、换题库）。
+  /// 此时再 notifyListeners 会触发 “used after being disposed” 断言崩溃。
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
   }
 }
