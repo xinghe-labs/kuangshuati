@@ -141,7 +141,9 @@ void main() {
         }
 
         final random = await repository.randomQuestions(20);
-        expect(random.length, greaterThanOrEqualTo(20));
+        // 产品规则：随机练习固定 20 题。整组抽题不能把总题量撑过 count
+        // （曾因最后一组超出被抽成 24 题）。
+        expect(random.length, 20);
         expect(
           random.map((question) => question.id).toSet().length,
           random.length,
