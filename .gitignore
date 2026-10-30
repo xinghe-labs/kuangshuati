@@ -6,3 +6,8 @@ artifacts/
 release/*.apk
 release/*.gz
 release/*.sqlite
+
+# Web 端构建生成物（由 tools/build_web.py 产出，不入库）
+app/assets/web_content/
+app/web/drift_worker.js.deps
+app/web/drift_worker.js.map
