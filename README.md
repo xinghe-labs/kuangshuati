@@ -84,7 +84,9 @@ flutter run
 ## 如何运行
 
 - Android：`release/` 目录有签名 APK，直接安装后下载数据包即可。
-- Web：`flutter build web -t lib/main_web.dart` 后本地静态托管 `app/build/web`（需带 `Cross-Origin-Opener-Policy: same-origin` 和 `Cross-Origin-Embedder-Policy: require-corp` 响应头），首次打开自动下载题库到浏览器。
+- Web：`python tools/build_web.py` 构建并组装 `app/build/web`（含题库与图片），再 `python tools/serve_web.py` 起一个自带 `Cross-Origin-Opener-Policy: same-origin` / `Cross-Origin-Embedder-Policy: require-corp` 响应头的静态服务器（默认 `http://127.0.0.1:8080`，加 `--lan` 可让同 Wi-Fi 的手机访问），首次打开自动下载题库到浏览器。
+  - 不能直接用普通静态服务器：缺这两个头时 `crossOriginIsolated` 为 false，数据库 worker 起不来，题库装不上。
+  - 该服务器本身已实测：`artifacts/web-serve-e2e.cjs` 5/5（`crossOriginIsolated=true` → 题库装载 → 进入练习 → 选答提交出答案）。
 - Windows/iOS：见「当前不包含」。
 
 Android APK 的签名、发布和自动更新流程见 [release/README.md](release/README.md)。源码保存在私有仓库，`.github/workflows/android-release.yml` 会把签名 APK 和更新清单发布到公开只读的 S3 兼容对象存储。
