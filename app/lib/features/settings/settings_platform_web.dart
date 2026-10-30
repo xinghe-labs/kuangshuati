@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Web 端的设置页平台条目：备份和应用更新在浏览器里都不成立，全部留空。
+import '../backup/web_backup_page.dart';
+
+/// Web 端的设置页平台条目：应用更新在浏览器里不成立，备份走浏览器下载/选文件。
 ///
-/// 练习记录保存在浏览器本地存储里，刷新不丢；清空浏览器数据才会丢，
-/// 这是 Web 端固有的限制，与其放一个点了没反应的按钮，不如不显示。
+/// 练习记录保存在浏览器本地存储里，刷新不丢；清理站点数据才会丢，
+/// 所以备份入口在这里尤其重要。
 class SettingsPlatform {
   const SettingsPlatform._();
 
@@ -13,7 +15,20 @@ class SettingsPlatform {
   /// Web 端没有应用内更新：新版本随页面刷新生效，这里什么都不做。
   static void autoCheckUpdate(BuildContext context, WidgetRef ref) {}
 
-  static List<SettingsPlatformAction> dataActions() => const [];
+  static List<SettingsPlatformAction> dataActions() => const [
+    SettingsPlatformAction(
+      icon: Icons.backup_outlined,
+      title: '备份与恢复',
+      subtitle: '导出备份文件，或从备份文件恢复练习记录',
+      onTap: _openBackup,
+    ),
+  ];
+
+  static void _openBackup(BuildContext context, WidgetRef ref) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (context) => const WebBackupPage()),
+    );
+  }
 
   static List<SettingsPlatformAction> aboutActions() => const [];
 

@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 import '../../data/database/app_database.dart';
+import 'gzip_codec_io.dart'
+    if (dart.library.js_interop) 'gzip_codec_web.dart' as gzip_codec;
 
 /// 用户数据的备份与恢复（开发文档 §15）。
 ///
@@ -55,9 +57,9 @@ class BackupService {
     return directory;
   }
 
-  /// 导出到 `<应用文档目录>/backups/`，返回落盘文件。
-  Future<File> export() async {
-    final directory = await _backupDirectory();
+  /// 构造备份信封（gzip JSON）。Android/iOS 写入文件，Web 触发浏览器下载，
+  /// 两端共用同一份字节与文件名，保证备份文件跨端可互导。
+  Future<BackupEnvelope> buildEnvelope() async {
     final createdAt = _now().toUtc();
     final tables = await _dumpTables();
     final payload = jsonEncode(tables);
@@ -74,8 +76,21 @@ class BackupService {
       'payloadSha256': sha256.convert(utf8.encode(payload)).toString(),
     };
     final body = jsonEncode({'manifest': manifest, 'tables': tables});
-    final file = File('${directory.path}/${_fileNameFor(createdAt)}');
-    await file.writeAsBytes(gzip.encode(utf8.encode(body)), flush: true);
+    return BackupEnvelope(
+      bytes: await gzip_codec.gzipEncodeBytes(
+        Uint8List.fromList(utf8.encode(body)),
+      ),
+      fileName: _fileNameFor(createdAt),
+      manifest: manifest,
+    );
+  }
+
+  /// 导出到 `<应用文档目录>/backups/`，返回落盘文件。
+  Future<File> export() async {
+    final directory = await _backupDirectory();
+    final envelope = await buildEnvelope();
+    final file = File('${directory.path}/${envelope.fileName}');
+    await file.writeAsBytes(envelope.bytes, flush: true);
     await _pruneOldBackups(keep: 5);
     return file;
   }
@@ -128,7 +143,7 @@ class BackupService {
   }) async {
     final List<int> raw;
     try {
-      raw = gzip.decode(bytes);
+      raw = await gzip_codec.gzipDecodeBytes(bytes);
     } catch (error) {
       throw BackupFormatException('$sourceName 不是有效的备份文件（压缩数据损坏）');
     }
@@ -291,6 +306,18 @@ class BackupService {
         .get();
     return {for (final row in result) '${row.data['name']}'};
   }
+}
+
+class BackupEnvelope {
+  const BackupEnvelope({
+    required this.bytes,
+    required this.fileName,
+    required this.manifest,
+  });
+
+  final Uint8List bytes;
+  final String fileName;
+  final Map<String, Object?> manifest;
 }
 
 class BackupTable {
