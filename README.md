@@ -74,7 +74,8 @@ flutter run
 - 题图从 SQLite BLOB 读取并完成 Flutter 图片解码测试。
 - Release APK 约 197 MiB，APK v2 签名与 4 字节对齐验证通过；完整题库分片约 298 MiB。
 - Web 端（`flutter build web -t lib/main_web.dart`，或一键 `python tools/build_web.py`）：浏览器内装入 187 MB 核心题库，六种练习模式全部实测可进入（`artifacts/web-modes-e2e.cjs` 11/11），答题/刷新恢复/错题入册/缓存复用实测通过（`artifacts/web-ui-e2e.cjs` 10/10、`artifacts/web-wrong-e2e.cjs` 7/7、`artifacts/web-e2e.cjs` 5/5）。
-- Web 端备份与恢复：导出触发浏览器真实下载 `.gkbackup`，选回文件后确认弹窗恢复成功（`artifacts/web-backup-e2e.cjs` 8/8）。两端信封格式一致，手机导出的备份可在 Web 恢复。
+- Web 端备份与恢复：导出触发浏览器真实下载 `.gkbackup`，选回文件后确认弹窗恢复成功（`artifacts/web-backup-e2e.cjs` 8/8）。
+- 跨端备份可互导（已实测，非推断）：`bash artifacts/verify-cross-backup.sh` —— 原生 `dart:io` gzip 产物能被浏览器解开，浏览器 `CompressionStream` 产物能被原生解开，两边均为标准 gzip（magic `1f 8b`）。
 
 ## 当前不包含
 
