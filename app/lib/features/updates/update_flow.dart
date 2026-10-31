@@ -122,7 +122,8 @@ class _UpdateDownloadDialog extends StatefulWidget {
   State<_UpdateDownloadDialog> createState() => _UpdateDownloadDialogState();
 }
 
-class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
+class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog>
+    with WidgetsBindingObserver {
   _DownloadStage _stage = _DownloadStage.downloading;
   double _progress = 0;
   String _message = '正在下载安装包';
@@ -131,7 +132,29 @@ class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _download();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // 用户去系统设置授完权回到应用时，自动重查授权状态，
+  // 否则对话框永远停在“前往授权”这一步。
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    if (_stage != _DownloadStage.permission) return;
+    widget.service.canInstallPackages().then((granted) {
+      if (!mounted || !granted) return;
+      setState(() {
+        _stage = _DownloadStage.ready;
+        _message = '安装包校验通过';
+      });
+    });
   }
 
   Future<void> _download() async {
@@ -161,6 +184,14 @@ class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
       setState(() {
         _stage = _DownloadStage.failed;
         _message = error.message;
+      });
+    } on Exception {
+      // 兼底：磁盘空间不足、文件读写失败等非预期错误也会把对话框
+      // 卡死在“正在下载”，必须给出失败态和重试入口。
+      if (!mounted) return;
+      setState(() {
+        _stage = _DownloadStage.failed;
+        _message = '下载失败，请检查网络和存储空间后重试';
       });
     }
   }
@@ -207,7 +238,7 @@ class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
               Text(_message),
             if (_stage == _DownloadStage.permission) ...[
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 '这是 Android 的系统安全限制。应用会校验安装包，系统还会确认新包签名与当前版本一致。',
                 style: TextStyle(color: AppColors.muted, height: 1.5),
               ),
@@ -216,6 +247,13 @@ class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
         ),
       ),
       actions: [
+        if (_stage == _DownloadStage.downloading && !widget.update.mandatory)
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+        // 授权未完成时只给“前往授权”，避免和“安装更新”并排出现
+        // 两个主按钮让用户不知道点哪个。
         if (_stage == _DownloadStage.permission)
           FilledButton(
             onPressed: () async {
@@ -223,8 +261,7 @@ class _UpdateDownloadDialogState extends State<_UpdateDownloadDialog> {
             },
             child: const Text('前往授权'),
           ),
-        if (_stage == _DownloadStage.ready ||
-            _stage == _DownloadStage.permission)
+        if (_stage == _DownloadStage.ready)
           FilledButton(onPressed: _install, child: const Text('安装更新')),
         if (_stage == _DownloadStage.failed) ...[
           TextButton(

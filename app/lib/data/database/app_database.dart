@@ -76,6 +76,11 @@ class Favorites extends Table {
   IntColumn get createdAt => integer()();
   TextColumn get note => text().withDefault(const Constant(''))();
 
+  /// 收藏与笔记分离：只写笔记不强制收藏。
+  /// favorited=false 的行是“纯笔记”，不出现在收藏列表里；
+  /// 取消收藏只翻转这个标记，不删行，笔记得以保留。
+  BoolColumn get favorited => boolean().withDefault(const Constant(true))();
+
   @override
   Set<Column<Object>> get primaryKey => {questionId};
 }
@@ -137,7 +142,7 @@ class AppDatabase extends _$AppDatabase {
   DateTime _now() => (_clock ?? DateTime.now)();
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -154,6 +159,11 @@ class AppDatabase extends _$AppDatabase {
         await customStatement('DELETE FROM favorites');
         await customStatement('DELETE FROM daily_stats');
         await customStatement('DELETE FROM module_stats');
+      }
+      if (from < 4) {
+        // 收藏/笔记分离：旧行都是真收藏，默认 favorited=true 即可，
+        // 不清理任何用户数据。
+        await migrator.addColumn(favorites, favorites.favorited);
       }
     },
     onCreate: (migrator) async {
@@ -268,10 +278,18 @@ class AppDatabase extends _$AppDatabase {
     ).getSingle();
     final totalDays = totalRow.data['n'] as int? ?? 0;
     final streakDays = int.tryParse(await getSetting('streakDays', '0')) ?? 0;
+    final lastDay = await getSettingOrNull('streakLastDay');
+    // 断档归零：最后练习日不是今天也不是昨天时，连续天数已中断，
+    // 展示层不能再拿历史峰值当“当前连续”。
+    var currentDays = totalDays == 0 ? 0 : streakDays;
+    if (lastDay != null && currentDays > 0) {
+      final gap = _daysBetween(lastDay, _localDay(_now()));
+      if (gap > 1) currentDays = 0;
+    }
     return PracticeStreak(
-      currentDays: totalDays == 0 ? 0 : streakDays,
+      currentDays: currentDays,
       totalDays: totalDays,
-      lastDay: await getSettingOrNull('streakLastDay'),
+      lastDay: lastDay,
     );
   }
 
@@ -319,36 +337,55 @@ class AppDatabase extends _$AppDatabase {
     )..orderBy([(row) => OrderingTerm.desc(row.answeredCount)])).watch();
   }
 
-  Future<List<Favorite>> allFavorites() => select(favorites).get();
+  /// 收藏列表：只显示用户主动收藏的题；写笔记但不收藏的行不在这里。
+  Stream<List<Favorite>> watchFavoriteItems() {
+    return (select(
+      favorites,
+    )..where((row) => row.favorited.equals(true))).watch();
+  }
+
+  /// 笔记列表：所有写过笔记的题（无论是否收藏）。
+  Stream<List<Favorite>> watchNoteItems() {
+    return (select(favorites)..where((row) => row.note.equals('').not()))
+        .watch();
+  }
 
   Stream<List<Favorite>> watchFavorites() => select(favorites).watch();
+
+  Future<List<Favorite>> allFavorites() => select(favorites).get();
 
   Future<bool> isFavorite(String questionId) async {
     final row = await (select(
       favorites,
     )..where((item) => item.questionId.equals(questionId))).getSingleOrNull();
-    return row != null;
+    return row?.favorited ?? false;
   }
 
+  /// 取消收藏不再删除整行（旧行为会连笔记一起永久删除），
+  /// 只翻转 favorited 标记；再次收藏时笔记还在。
   Future<bool> toggleFavorite(String questionId) async {
     final existing = await (select(
       favorites,
     )..where((item) => item.questionId.equals(questionId))).getSingleOrNull();
-    if (existing != null) {
-      await (delete(
-        favorites,
-      )..where((item) => item.questionId.equals(questionId))).go();
-      return false;
+    if (existing == null) {
+      await into(favorites).insert(
+        FavoritesCompanion.insert(
+          questionId: questionId,
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+      return true;
     }
-    await into(favorites).insert(
-      FavoritesCompanion.insert(
-        questionId: questionId,
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-      ),
+    final favorited = !existing.favorited;
+    await (update(
+      favorites,
+    )..where((item) => item.questionId.equals(questionId))).write(
+      FavoritesCompanion(favorited: Value(favorited)),
     );
-    return true;
+    return favorited;
   }
 
+  /// 保存笔记不强制收藏（favorited 保持原状；没收藏过则为 false）。
   Future<void> setFavoriteNote(String questionId, String note) async {
     final existing = await (select(
       favorites,
@@ -359,6 +396,7 @@ class AppDatabase extends _$AppDatabase {
         questionId: questionId,
         createdAt: existing?.createdAt ?? DateTime.now().millisecondsSinceEpoch,
         note: Value(note.trim()),
+        favorited: Value(existing?.favorited ?? false),
       ),
     );
   }
@@ -410,6 +448,21 @@ class AppDatabase extends _$AppDatabase {
         ? null
         : now + timeLimitSeconds * 1000;
     await transaction(() async {
+      // 同一时间只保留一组“进行中”：旧的 active 会话在任何界面上都
+      // 回不去了（首页只展示最新一组），留在 active 状态只会制造
+      // “继续练习”指向另一组的错觉，这里统一标记为 abandoned。
+      await (update(
+        practiceSessions,
+      )..where(
+            (row) =>
+                row.status.equals(SessionStatus.active.value) &
+                row.id.equals(id).not(),
+          )).write(
+        PracticeSessionsCompanion(
+          status: Value(SessionStatus.abandoned.value),
+          updatedAt: Value(now),
+        ),
+      );
       await into(practiceSessions).insert(
         PracticeSessionsCompanion.insert(
           id: id,
@@ -453,6 +506,12 @@ class AppDatabase extends _$AppDatabase {
     bool uncertain = false,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
+    final existing =
+        await (select(sessionAnswers)..where(
+              (row) =>
+                  row.sessionId.equals(sessionId) &
+                  row.questionId.equals(questionId),
+            )).getSingleOrNull();
     await into(sessionAnswers).insertOnConflictUpdate(
       SessionAnswersCompanion.insert(
         sessionId: sessionId,
@@ -467,6 +526,47 @@ class AppDatabase extends _$AppDatabase {
     );
     await (update(practiceSessions)..where((row) => row.id.equals(sessionId)))
         .write(PracticeSessionsCompanion(updatedAt: Value(now)));
+    // 首次提交时实时计入“今日已答”，不用等交卷：
+    // 练习中退出后再看统计，当天数字不再归零。
+    // 后续重存（翻题、标记不确定、退出前保存）不重复计数。
+    if (submitted && (existing == null || !existing.submitted)) {
+      await _accumulateDailyStats(
+        answered: 1,
+        correct: isCorrect == true ? 1 : 0,
+        durationMs: durationMs,
+        bumpStreak: true,
+      );
+    }
+  }
+
+  /// 把一份答题增量并入当日统计；需要时推进连续天数。
+  Future<void> _accumulateDailyStats({
+    required int answered,
+    required int correct,
+    required int durationMs,
+    bool bumpStreak = false,
+  }) async {
+    if (answered == 0 && correct == 0 && durationMs == 0 && !bumpStreak) {
+      return;
+    }
+    final now = _now();
+    final day = _localDay(now);
+    final daily = await (select(
+      dailyStats,
+    )..where((row) => row.day.equals(day))).getSingleOrNull();
+    await into(dailyStats).insertOnConflictUpdate(
+      DailyStatsCompanion.insert(
+        day: day,
+        answeredCount: Value((daily?.answeredCount ?? 0) + answered),
+        correctCount: Value((daily?.correctCount ?? 0) + correct),
+        durationMs: Value((daily?.durationMs ?? 0) + durationMs),
+        // 冲突更新时会整行覆盖，必须带上已有值，否则会把当天的开组数清零。
+        sessionsCount: Value(daily?.sessionsCount ?? 0),
+      ),
+    );
+    if (bumpStreak) {
+      await _bumpPracticeStreak(day: day, answeredCount: answered);
+    }
   }
 
   Future<void> saveProgress({
@@ -498,9 +598,11 @@ class AppDatabase extends _$AppDatabase {
     };
     final now = _now();
     final nowMs = now.millisecondsSinceEpoch;
-    var answeredCount = 0;
-    var correctCount = 0;
-    var totalDurationMs = 0;
+    // 已提交过的答案在 saveAnswer 时已实时计入当日统计，
+    // 这里只补交卷时才首次提交的题（模考/交卷后统一判分的练习）。
+    var freshAnswered = 0;
+    var freshCorrect = 0;
+    var freshDurationMs = 0;
 
     await transaction(() async {
       for (final row in questions) {
@@ -510,9 +612,12 @@ class AppDatabase extends _$AppDatabase {
         final selected = _decodeSelected(answer?.selectedJson);
         final isCorrect = selected.isNotEmpty && question.isCorrect(selected);
         final blank = selected.isEmpty;
-        if (!blank) answeredCount++;
-        if (isCorrect) correctCount++;
-        totalDurationMs += answer?.durationMs ?? 0;
+        final alreadySubmitted = answer?.submitted ?? false;
+        if (!blank && !alreadySubmitted) {
+          freshAnswered++;
+          if (isCorrect) freshCorrect++;
+          freshDurationMs += answer?.durationMs ?? 0;
+        }
 
         await into(sessionAnswers).insertOnConflictUpdate(
           SessionAnswersCompanion.insert(
@@ -527,10 +632,13 @@ class AppDatabase extends _$AppDatabase {
           ),
         );
 
+        // 未作答的题只落答案记录，不进错题本：
+        // 白卷、翻完没做的题不应该被当成“做错”来复习。
+        if (blank) continue;
         await _updateReview(
           question: question,
           isCorrect: isCorrect,
-          blank: blank,
+          uncertain: answer?.uncertain ?? false,
           now: now,
         );
       }
@@ -542,13 +650,13 @@ class AppDatabase extends _$AppDatabase {
       await into(dailyStats).insertOnConflictUpdate(
         DailyStatsCompanion.insert(
           day: day,
-          answeredCount: Value((daily?.answeredCount ?? 0) + answeredCount),
-          correctCount: Value((daily?.correctCount ?? 0) + correctCount),
-          durationMs: Value((daily?.durationMs ?? 0) + totalDurationMs),
+          answeredCount: Value((daily?.answeredCount ?? 0) + freshAnswered),
+          correctCount: Value((daily?.correctCount ?? 0) + freshCorrect),
+          durationMs: Value((daily?.durationMs ?? 0) + freshDurationMs),
           sessionsCount: Value((daily?.sessionsCount ?? 0) + 1),
         ),
       );
-      await _bumpPracticeStreak(day: day, answeredCount: answeredCount);
+      await _bumpPracticeStreak(day: day, answeredCount: freshAnswered);
 
       final moduleTotals = <String, _ModuleTotal>{};
       for (final row in questions) {
@@ -613,16 +721,49 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// 题库换版后，部分错题/收藏指向的题可能已不存在；
+  /// 提供“清理失效记录”，避免错题页永远留着打不开的空行。
+  Future<int> deleteReviewItems(Iterable<String> questionIds) async {
+    final ids = questionIds.toList();
+    if (ids.isEmpty) return 0;
+    var deleted = 0;
+    for (final id in ids) {
+      deleted +=
+          await (delete(
+            reviewItems,
+          )..where((row) => row.questionId.equals(id))).go();
+    }
+    return deleted;
+  }
+
   Future<void> _updateReview({
     required QuestionContent question,
     required bool isCorrect,
-    required bool blank,
+    required bool uncertain,
     required DateTime now,
   }) async {
     final existing = await (select(
       reviewItems,
     )..where((row) => row.questionId.equals(question.id))).getSingleOrNull();
-    if (isCorrect && existing == null) return;
+    // 答对且从未进过错题本：不需要复习；
+    // 但标记过“不确定”的答对题要进一次复习（明天到期），
+    // 否则用户的不确定标记在交卷后彻底消失。
+    if (isCorrect && existing == null) {
+      if (!uncertain) return;
+      await into(reviewItems).insert(
+        ReviewItemsCompanion.insert(
+          questionId: question.id,
+          source: const Value('uncertain'),
+          stage: const Value(0),
+          nextReviewAt: Value(
+            now.add(const Duration(days: 1)).millisecondsSinceEpoch,
+          ),
+          lastResult: const Value('uncertain'),
+          updatedAt: now.millisecondsSinceEpoch,
+        ),
+      );
+      return;
+    }
 
     final currentStage = existing?.stage ?? 0;
     final nextStage = isCorrect ? (currentStage + 1).clamp(0, 4) : 0;
@@ -632,10 +773,8 @@ class AppDatabase extends _$AppDatabase {
       ReviewItemsCompanion.insert(
         questionId: question.id,
         source: Value(existing?.source ?? 'practice'),
-        wrongCount: Value(
-          (existing?.wrongCount ?? 0) + (!isCorrect && !blank ? 1 : 0),
-        ),
-        blankCount: Value((existing?.blankCount ?? 0) + (blank ? 1 : 0)),
+        wrongCount: Value((existing?.wrongCount ?? 0) + (isCorrect ? 0 : 1)),
+        blankCount: Value(existing?.blankCount ?? 0),
         stage: Value(nextStage),
         nextReviewAt: Value(
           mastered
@@ -643,7 +782,7 @@ class AppDatabase extends _$AppDatabase {
               : now.add(Duration(days: intervalDays)).millisecondsSinceEpoch,
         ),
         mastered: Value(mastered),
-        lastResult: Value(blank ? 'blank' : (isCorrect ? 'correct' : 'wrong')),
+        lastResult: Value(isCorrect ? 'correct' : 'wrong'),
         updatedAt: now.millisecondsSinceEpoch,
       ),
     );

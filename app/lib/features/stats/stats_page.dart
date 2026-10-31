@@ -44,20 +44,13 @@ class _ReviewCard extends ConsumerWidget {
       loading: () => const LinearProgressIndicator(minHeight: 2),
       error: (error, stack) => Text('读取错题本失败：$error'),
       data: (items) {
-        final now = DateTime.now();
-        final todayEnd = DateTime(
-          now.year,
-          now.month,
-          now.day,
-          23,
-          59,
-          59,
-        ).millisecondsSinceEpoch;
+        // 到期口径与错题页/首页保持一致：nextReviewAt <= now 就算待复习，
+        // 不再用“当天 23:59:59”提前把明天的任务算进来。
+        final now = DateTime.now().millisecondsSinceEpoch;
         final active = items.where((item) => !item.mastered).toList();
         final due = active
             .where(
-              (item) =>
-                  item.nextReviewAt == null || item.nextReviewAt! <= todayEnd,
+              (item) => item.nextReviewAt == null || item.nextReviewAt! <= now,
             )
             .length;
         final mastered = items.length - active.length;
@@ -74,7 +67,7 @@ class _ReviewCard extends ConsumerWidget {
                 Row(
                   children: [
                     _ReviewNumber('复习中', '${active.length}'),
-                    _ReviewNumber('今日到期', '$due', highlight: due > 0),
+                    _ReviewNumber('待复习', '$due', highlight: due > 0),
                     _ReviewNumber('已掌握', '$mastered'),
                   ],
                 ),
@@ -85,14 +78,14 @@ class _ReviewCard extends ConsumerWidget {
                     value: progress,
                     minHeight: 5,
                     backgroundColor: AppColors.softFill,
-                    valueColor: const AlwaysStoppedAnimation(AppColors.ink),
+                    valueColor: AlwaysStoppedAnimation(AppColors.ink),
                   ),
                 ),
                 const SizedBox(height: 7),
                 Text(
                   total == 0
                       ? '答错的题会自动进入这里，安排复习'
-                      : '掌握进度 $mastered / $total · ${due > 0 ? '有 $due 道今天该复习' : '今天没有到期的复习'}',
+                      : '掌握进度 $mastered / $total · ${due > 0 ? '有 $due 道现在待复习' : '暂时没有待复习的错题'}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -150,10 +143,20 @@ class StatsPage extends ConsumerWidget {
           loading: () => const LinearProgressIndicator(minHeight: 2),
           error: (error, stack) => Text('读取统计失败：$error'),
           data: (daily) {
-            final recent = daily.reversed.toList();
-            final lastSeven = recent.length > 7
-                ? recent.sublist(recent.length - 7)
-                : recent;
+            // 近 7 天按自然日统计：日表里没有记录的日子也是 0 题，
+            // 不再把“最近 7 条有数据的记录”当成最近 7 天。
+            final now = DateTime.now();
+            String localDay(DateTime time) {
+              final month = time.month.toString().padLeft(2, '0');
+              final day = time.day.toString().padLeft(2, '0');
+              return '${time.year}-$month-$day';
+            }
+            final lastSevenDays = {
+              for (var i = 0; i < 7; i++) localDay(now.subtract(Duration(days: i))),
+            };
+            final lastSeven = daily
+                .where((item) => lastSevenDays.contains(item.day))
+                .toList(growable: false);
             final answered = lastSeven.fold<int>(
               0,
               (sum, item) => sum + item.answeredCount,
@@ -241,17 +244,17 @@ class StatsPage extends ConsumerWidget {
                 0;
             return Container(
               padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: AppColors.ink,
                 borderRadius: BorderRadius.all(Radius.circular(8)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     '下一步建议',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppColors.onInk,
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
@@ -263,8 +266,8 @@ class StatsPage extends ConsumerWidget {
                         : due > 0
                         ? '先清掉 $due 道到期错题，再针对“${weak.module}”做一组短练习。'
                         : '当前最需要补强的是“${weak.module}”，正确率 ${(weak.correctCount * 100 / weak.answeredCount).round()}%。',
-                    style: const TextStyle(
-                      color: Color(0xFFD2D2CC),
+                    style: TextStyle(
+                      color: AppColors.onInkMuted,
                       fontSize: 13,
                       height: 1.55,
                     ),
@@ -274,7 +277,7 @@ class StatsPage extends ConsumerWidget {
                     FilledButton.icon(
                       onPressed: () => _startModule(context, ref, weak.module),
                       style: FilledButton.styleFrom(
-                        backgroundColor: Colors.white,
+                        backgroundColor: AppColors.onInk,
                         foregroundColor: AppColors.ink,
                       ),
                       icon: const Icon(Icons.arrow_forward, size: 17),

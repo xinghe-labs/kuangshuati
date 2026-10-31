@@ -87,7 +87,7 @@ class MetricStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(
           top: BorderSide(color: AppColors.ink, width: 2),
@@ -106,7 +106,7 @@ class MetricStrip extends StatelessWidget {
                 decoration: BoxDecoration(
                   border: index == items.length - 1
                       ? null
-                      : const Border(right: BorderSide(color: AppColors.line)),
+                      : Border(right: BorderSide(color: AppColors.line)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,7 +130,7 @@ class MetricStrip extends StatelessWidget {
                             ),
                         ],
                       ),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.ink,
                         fontSize: 22,
                         height: 1.1,
@@ -173,7 +173,7 @@ class AppEmptyState extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 42),
       child: Column(
         children: [
-          const Icon(Icons.inbox_outlined, size: 28, color: AppColors.muted),
+          Icon(Icons.inbox_outlined, size: 28, color: AppColors.muted),
           const SizedBox(height: 12),
           Text(title, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 5),
@@ -198,7 +198,7 @@ class HairlineList extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: AppColors.surface,
-      shape: const Border(
+      shape: Border(
         top: BorderSide(color: AppColors.line),
         bottom: BorderSide(color: AppColors.line),
       ),

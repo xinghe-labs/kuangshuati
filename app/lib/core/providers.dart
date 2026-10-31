@@ -49,7 +49,12 @@ final reviewItemsProvider = StreamProvider<List<ReviewItem>>((ref) {
 });
 
 final favoritesProvider = StreamProvider<List<Favorite>>((ref) {
-  return ref.watch(databaseProvider).watchFavorites();
+  // 只显示用户主动收藏的题；写笔记但未收藏的行走 notesProvider。
+  return ref.watch(databaseProvider).watchFavoriteItems();
+});
+
+final notesProvider = StreamProvider<List<Favorite>>((ref) {
+  return ref.watch(databaseProvider).watchNoteItems();
 });
 
 final dailyStatsProvider = StreamProvider<List<DailyStat>>((ref) {
