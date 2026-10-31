@@ -104,19 +104,13 @@ class _PracticePageState extends ConsumerState<PracticePage>
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        final router = GoRouter.of(context);
-        await _saveProgress();
-        if (mounted) router.pop();
+        await _confirmExit();
       },
       child: Scaffold(
         appBar: AppBar(
           leading: IconButton(
             tooltip: '返回',
-            onPressed: () async {
-              final router = GoRouter.of(context);
-              await _saveProgress();
-              if (mounted) router.pop();
-            },
+            onPressed: _confirmExit,
             icon: const Icon(Icons.arrow_back),
           ),
           title: Text(
@@ -701,6 +695,40 @@ class _PracticePageState extends ConsumerState<PracticePage>
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('笔记已保存，可在题库页「笔记」里查看')));
+  }
+
+  /// 退出练习前的确认。
+  ///
+  /// 之前点返回键或左上角箭头会直接离开做题页：辛辛苦苦做了几十题，
+  /// 误触一下心流就被打断，而且不知道进度到底还在不在。交卷有确认框，
+  /// 退出却没有，行为不一致。这里统一补上确认，并明确告诉用户进度已保存。
+  Future<void> _confirmExit() async {
+    final answered = _selected.values.where((value) => value.isNotEmpty).length;
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('退出练习？'),
+        content: Text(
+          answered == 0
+              ? '还没作答。退出后可以随时回到这里继续。'
+              : '已作答 $answered 题，进度会保存，可以随时回来继续。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('继续做题'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('退出'),
+          ),
+        ],
+      ),
+    );
+    if (leave != true || !mounted) return;
+    final router = GoRouter.of(context);
+    await _saveProgress();
+    if (mounted) router.pop();
   }
 
   Future<void> _showAnswerSheet() async {
