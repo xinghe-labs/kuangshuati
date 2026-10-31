@@ -53,6 +53,9 @@ abstract class ContentRepository {
   /// 为什么需要：早先固定返回题库最前面的 100 题，用户每次点“顺序练习”
   /// 拿到的都是同一批（题库共 58890 题，而顺序练习永远只覆盖前 100 题），
   /// 练完之后要么重复刷同一批，要么以为题量就这么点。
+  ///
+  /// 实现必须能承受很大的 [excludeIds]：SQLite 一条语句最多 32766 个
+  /// 绑定变量，而老用户做过的题会持续累积（题库 58890 道）。
   FutureOr<List<QuestionContent>> sequenceQuestions({
     int limit = 100,
     Iterable<String> excludeIds = const [],

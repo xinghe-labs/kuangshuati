@@ -141,17 +141,25 @@ class SqlContentRepository implements ContentRepository {
     // 不一定记得题干怎么写的。
     // 用 instr 而不是 LIKE '%...%'：用户输入的 % 和 _ 在 LIKE 里是通配符，
     // 搜“20%”这种题干会变成模糊匹配、结果全乱。
+    //
+    // 两侧都转小写：题干里有大量英文缩写（GDP 93 题、APP 32 题、AI 132 题），
+    // 而 instr 是大小写敏感的。界面会把输入先 toLowerCase，于是用户按题干
+    // 里看到的“GDP”去搜，实际查的是“gdp”，命中 0 条，误以为题库里没有。
+    final needle = normalized.toLowerCase();
+    // 只按年份倒序：实测多列 ORDER BY（year DESC, paper_id, sequence）
+    // 会让 SQLite 必须把命中的全部行排完才能取前 200 条，搜“的”要 1.7s；
+    // 单列 year DESC 可以直接走 questions_year 索引倒序扫，只要 5ms。
     final rows = await _executor.select(
       '''
       SELECT *
       FROM questions
-      WHERE instr(stem_text, ?) > 0
-         OR instr(COALESCE(material_markup, ''), ?) > 0
-         OR instr(options_json, ?) > 0
-      ORDER BY year DESC, paper_id ASC, sequence ASC
+      WHERE instr(lower(stem_text), ?) > 0
+         OR instr(lower(COALESCE(material_markup, '')), ?) > 0
+         OR instr(lower(options_json), ?) > 0
+      ORDER BY year DESC
       LIMIT ?
       ''',
-      [normalized, normalized, normalized, limit],
+      [needle, needle, needle, limit],
     );
     return rows.map(_questionFromRow).toList(growable: false);
   }
@@ -231,20 +239,38 @@ class SqlContentRepository implements ContentRepository {
     Iterable<String> excludeIds = const [],
   }) async {
     // 已做过的题来自 App 自己的数据库（答题历史），不在题库文件里，
-    // 所以只能把 id 传进来。用 NOT IN 拼参数，并在上层限制数量。
-    final excluded = excludeIds.toSet().toList(growable: false);
-    final exclusion = excluded.isEmpty
-        ? ''
-        : 'WHERE id NOT IN (${List.filled(excluded.length, '?').join(',')})';
+    // 所以只能把 id 传进来。
+    //
+    // 不能直接拼 `id NOT IN (?,?,?...)`：SQLite 一条语句最多 32766 个绑定
+    // 变量（实测传 40000 个 id 报 “too many SQL variables”），而顺序练习要把
+    // “全部做过的题”都排掉，老用户很容易超过这个数。
+    // 也不能分批查询：NOT IN 只对当前批生效，第二批会把第一批排除的题又
+    // 取回来（实测会重复返回已做过的题）。
+    //
+    // 改用单个参数传 JSON，交给 SQLite 的 json_each 展开（题库 SQLite 编译时
+    // 已带 JSON1），一个绑定变量就能排除任意多个 id。
+    final excluded = excludeIds.toSet();
+    if (excluded.isEmpty) {
+      final rows = await _executor.select(
+        '''
+        SELECT *
+        FROM questions
+        ORDER BY year ASC, paper_id ASC, sequence ASC, question_no ASC
+        LIMIT ?
+        ''',
+        [limit],
+      );
+      return rows.map(_questionFromRow).toList(growable: false);
+    }
     final rows = await _executor.select(
       '''
       SELECT *
       FROM questions
-      $exclusion
+      WHERE id NOT IN (SELECT value FROM json_each(?))
       ORDER BY year ASC, paper_id ASC, sequence ASC, question_no ASC
       LIMIT ?
       ''',
-      [...excluded, limit],
+      [jsonEncode(excluded.toList(growable: false)), limit],
     );
     return rows.map(_questionFromRow).toList(growable: false);
   }

@@ -61,9 +61,17 @@ class KuangshuatiApp extends ConsumerWidget {
 /// 把「App 内题目字号」与「系统字号」合并成一个最终的文字缩放倍数。
 ///
 /// 不能相乘：系统字号 1.3 × 设置里选“小”0.9 = 1.17，用户明明选了“小”，
-/// 字却比标准还大，设置项形同虚设。改成取较大值——用户选“小”就真能变小
-/// （尊重 App 内选择），用户选“大”也不会被系统的小字号拖回去（尊重系统设置）。
+/// 字却比标准还大，设置项形同虚设。
+///
+/// 但也不能取较大值：设置里的“小”就是 0.9，而系统字号正常就是 1.0，
+/// max(0.9, 1.0) 永远返回 1.0——用户点“小”完全没反应（中老年用户
+/// 想调小字号时最容易踩到）。
+///
+/// 改成：以系统字号为基准，按设置档位的相对比例缩放。
+/// 设置 0.9 = 标准字号的 90%，1.15 = 115%，两者都真正生效，
+/// 同时系统字号调大时整体跟着变大（不会把系统设置覆盖掉）。
 double effectiveTextScale(double appScale, double systemScale) {
-  final larger = appScale > systemScale ? appScale : systemScale;
-  return larger.clamp(0.85, 1.6);
+  // 设置里的“标准”是 1.0，用它当基准把设置值换算成倍率。
+  final factor = appScale <= 0 ? 1.0 : appScale;
+  return (systemScale * factor).clamp(0.85, 1.6);
 }

@@ -216,4 +216,32 @@ void main() {
       '数量关系',
     );
   });
+
+  test('正确率相同时优先选作答多的模块，而不是列表里靠前的那个', () {
+    ModuleStat stat(String module, int answered, int correct) => ModuleStat(
+      module: module,
+      answeredCount: answered,
+      correctCount: correct,
+      durationMs: 1000,
+      updatedAt: 0,
+    );
+
+    // 两个模块都是 100%：答了 200 道的样本比刚做满 10 道的更可信。
+    // 早先只比正确率，稳定排序会返回列表第一个，
+    // 于是“刚做满 10 道全对”的模块被说成“当前最需要补强”。
+    expect(
+      weakestModule([
+        stat('数量关系', 10, 10),
+        stat('言语理解', 200, 200),
+      ])?.module,
+      '言语理解',
+    );
+    expect(
+      weakestModule([
+        stat('数量关系', 200, 200),
+        stat('言语理解', 10, 10),
+      ])?.module,
+      '数量关系',
+    );
+  });
 }

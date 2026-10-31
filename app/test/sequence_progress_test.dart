@@ -55,4 +55,29 @@ void main() {
       isEmpty,
     );
   });
+
+  test('已做过的题超过 SQLite 参数上限（32766）时也能继续往后做', () async {
+    // 老用户很容易做过 4 万道以上（题库共 58890 道）。
+    // 早先用 `id NOT IN (?,?,...)` 拼参数，超过 32766 个直接报
+    // “too many SQL variables”，顺序练习点不动。
+    final all = await repository.sequenceQuestions(limit: 40000);
+    final ids = all.map((question) => question.id).toList();
+    expect(ids.length, greaterThan(32766));
+
+    final next = await repository.sequenceQuestions(limit: 100, excludeIds: ids);
+    expect(next, hasLength(100));
+    expect(
+      next.map((question) => question.id).toSet().intersection(ids.toSet()),
+      isEmpty,
+      reason: '已做过的题不能再出现',
+    );
+  });
+
+  test('全部题都做过时返回空列表（首页据此提示“已全部练过”）', () async {
+    final all = await repository.sequenceQuestions(limit: 60000);
+    final ids = all.map((question) => question.id).toList();
+    expect(ids.length, greaterThan(50000));
+    final next = await repository.sequenceQuestions(limit: 100, excludeIds: ids);
+    expect(next, isEmpty);
+  });
 }
