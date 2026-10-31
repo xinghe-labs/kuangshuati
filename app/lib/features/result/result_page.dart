@@ -12,9 +12,16 @@ import '../../shared/widgets/rich_content.dart';
 import '../practice/practice_launcher.dart';
 
 class ResultPage extends ConsumerStatefulWidget {
-  const ResultPage({required this.sessionId, super.key});
+  const ResultPage({required this.sessionId, this.timedOut = false, super.key});
 
   final String sessionId;
+
+  /// 是否为「考试时间到，系统自动交卷」进入的结果页。
+  ///
+  /// 超时自动交卷时，练习页原本只弹一个 SnackBar 就立刻 pushReplacement，
+  /// SnackBar 依附的 Scaffold 随即被销毁，提示实际上一闪而过甚至完全看不到，
+  /// 用户会莫名其妙地被扔到结果页。改成把标记带到结果页顶部常驻显示。
+  final bool timedOut;
 
   @override
   ConsumerState<ResultPage> createState() => _ResultPageState();
@@ -95,6 +102,34 @@ class _ResultPageState extends ConsumerState<ResultPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(18, 10, 18, 28),
         children: [
+          if (widget.timedOut) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              color: AppColors.warningFill,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.timer_off_outlined,
+                    size: 16,
+                    color: AppColors.warning,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '考试时间已到，答卷已自动提交。未作答的题按 0 分计，不会记入错题本。',
+                      style: TextStyle(
+                        color: AppColors.ink,
+                        fontSize: 12,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           Container(
             padding: const EdgeInsets.all(20),
             color: AppColors.ink,

@@ -623,12 +623,14 @@ class _PracticePageState extends ConsumerState<PracticePage>
             questionLookup: _questions,
           );
       if (!mounted) return;
-      if (automatic) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('考试时间已到，答卷已自动提交')));
-      }
-      context.pushReplacement('/result/${widget.sessionId}');
+      // 超时自动交卷的提示不能只弹 SnackBar：这里紧接着 pushReplacement，
+      // SnackBar 依附的 Scaffold 立刻被销毁，用户根本看不到提示，只会莫名
+      // 其妙地被扔到结果页。改成把标记带到结果页顶部常驻显示。
+      context.pushReplacement(
+        automatic
+            ? '/result/${widget.sessionId}?timedOut=1'
+            : '/result/${widget.sessionId}',
+      );
     } catch (error) {
       if (!mounted) return;
       setState(() => _finishing = false);

@@ -150,4 +150,32 @@ void main() {
     // 正确选项要打上「正确答案」标签。
     expect(find.text('正确答案'), findsWidgets);
   });
+
+  testWidgets('超时自动交卷的结果页顶部要有明确提示', (tester) async {
+    // 之前超时只弹一个 SnackBar 就立刻 pushReplacement，SnackBar 依附的
+    // Scaffold 随即被销毁，提示一闪而过甚至完全看不到，用户会被莫名其妙地
+    // 扔到结果页。现在标记带到结果页顶部常驻显示。
+    tester.view.physicalSize = const Size(1200, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final sessionId = await seedSession(PracticeMode.mock);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(database),
+          contentRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: ResultPage(sessionId: sessionId, timedOut: true),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('考试时间已到'), findsOneWidget);
+    expect(find.textContaining('不会记入错题本'), findsOneWidget);
+  });
 }
