@@ -274,6 +274,23 @@ class SeedContentRepository implements ContentRepository {
   }
 
   @override
+  List<QuestionContent> searchQuestions(String query, {int limit = 200}) {
+    final normalized = query.trim().toLowerCase();
+    if (normalized.isEmpty) return const <QuestionContent>[];
+    return questions
+        .where(
+          (question) =>
+              question.stem.toLowerCase().contains(normalized) ||
+              (question.material ?? '').toLowerCase().contains(normalized) ||
+              question.options.values.any(
+                (text) => text.toLowerCase().contains(normalized),
+              ),
+        )
+        .take(limit)
+        .toList(growable: false);
+  }
+
+  @override
   Uint8List? imageBytes(String assetId) => null;
 
   @override

@@ -49,6 +49,19 @@ abstract class ContentRepository {
 
   FutureOr<List<QuestionContent>> sequenceQuestions({int limit = 100});
 
+  /// 按题干/材料/选项文本搜题。
+  ///
+  /// 为什么需要：题库有 58890 道题，而首页和题库页的搜索框只能搜
+  /// 试卷标题和地区。用户想找“那道做错过的题”时，按题干搜得到 0 条结果，
+  /// 只能一份份试卷点进去翻——实际使用中基本等于找不到。
+  ///
+  /// [limit] 用于限制返回量，避免一个很短的查询词（如“下列”）把几万道题
+  /// 全部拉进列表。
+  FutureOr<List<QuestionContent>> searchQuestions(
+    String query, {
+    int limit = 200,
+  });
+
   FutureOr<Uint8List?> imageBytes(String assetId);
 
   /// 取图并带原始尺寸；行内公式图需要按高度决定行内/块级渲染。
