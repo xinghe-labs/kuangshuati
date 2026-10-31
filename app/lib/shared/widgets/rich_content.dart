@@ -26,10 +26,17 @@ const _kInlineDesignFontSize = 15.0;
 /// 题图富文本：分段落渲染；行内小图与文字同基线混排，
 /// 连续块级图用 Wrap 并排；所有图保留点击放大。
 class RichContent extends ConsumerStatefulWidget {
-  const RichContent(this.markup, {this.style, super.key});
+  const RichContent(this.markup, {this.style, this.selectable = true, super.key});
 
   final String markup;
   final TextStyle? style;
+
+  /// 是否允许长按选字。
+  ///
+  /// `SelectableText` 自带的手势识别会呑掉外层 InkWell 的点击，
+  /// 所以放进「整块可点」区域的文字（选项）必须关掉，
+  /// 否则用户点选项文字没有任何反应。
+  final bool selectable;
 
   @override
   ConsumerState<RichContent> createState() => _RichContentState();
@@ -96,21 +103,47 @@ class _RichContentState extends ConsumerState<RichContent> {
     final paragraphs = <Widget>[];
     final inlineSpans = <InlineSpan>[];
     final blockImages = <_Segment>[];
+    // 本段落内最高的行内图。分数公式图原始高度 28px（设计字号 15px），
+    // 比 15 × 1.65 的行高还高；不把行高撞开，图的下半截就会被下一行文字盖住，
+    // 分母直接看不见（1/8000 读成 1/800）。
+    var maxInlineImageHeight = 0.0;
 
     void flushInline() {
       if (inlineSpans.isEmpty) return;
-      final span = TextSpan(children: List.of(inlineSpans), style: baseStyle);
+      var paragraphStyle = baseStyle;
+      final fontSize = baseStyle.fontSize ?? _kInlineDesignFontSize;
+      if (maxInlineImageHeight > 0 && fontSize > 0) {
+        final baseLineHeight = baseStyle.height ?? 1.2;
+        final neededLineHeight = maxInlineImageHeight / fontSize;
+        if (neededLineHeight > baseLineHeight) {
+          paragraphStyle = baseStyle.copyWith(height: neededLineHeight);
+        }
+      }
+      final span = TextSpan(children: List.of(inlineSpans), style: paragraphStyle);
+      // TextSpan 的行高不会因为 WidgetSpan 变高而自动撑开，
+      // 单靠 style.height 改不动“一行有多高”——必须用 StrutStyle 把
+      // 行盒（line box）的高度强制拉高到能装下行内公式图，
+      // 否则分数图的下半截（分母）永远被下一行文字盖住。
+      final strut = maxInlineImageHeight > 0
+          ? StrutStyle(
+              fontSize: paragraphStyle.fontSize,
+              height: paragraphStyle.height,
+              leadingDistribution: TextLeadingDistribution.even,
+              forceStrutHeight: true,
+            )
+          : null;
       // Web 上用 SelectableText 会有两个真问题：
       // 1) 它在画布上盖一层 textarea，把点击拦下来，选项点文字没反应；
       // 2) 语义节点的文字变空，屏幕阅读器读不到题干和选项。
       // 桌面端可以按住鼠标选字，但刷题页更需要“点得动、读得出”，
       // 所以 web 退回普通 Text，原生端保留可选中。
       paragraphs.add(
-        kIsWeb
-            ? Text.rich(span)
-            : SelectableText.rich(span),
+        kIsWeb || !widget.selectable
+            ? Text.rich(span, strutStyle: strut)
+            : SelectableText.rich(span, strutStyle: strut),
       );
       inlineSpans.clear();
+      maxInlineImageHeight = 0;
     }
 
     void flushImages() {
@@ -151,6 +184,9 @@ class _RichContentState extends ConsumerState<RichContent> {
             ? baseStyle.fontSize! / _kInlineDesignFontSize
             : 1.0;
         final inlineHeight = (knownHeight ?? _kInlineDesignFontSize) * scale;
+        if (inlineHeight > maxInlineImageHeight) {
+          maxInlineImageHeight = inlineHeight;
+        }
         inlineSpans.add(
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
@@ -282,14 +318,24 @@ class _InlineAssetImageState extends ConsumerState<_InlineAssetImage> {
           fit: BoxFit.contain,
           gaplessPlayback: true,
         );
-        return Semantics(
-          button: true,
-          label: '查看题图',
-          child: GestureDetector(
-            onTap: () => _showImage(context, image.bytes),
-            child: imageWidget,
-          ),
-        );
+        // 公式图是白底黑字导出的灰度位图（实测最亮像素只有 #585858），
+        // 深色模式下直接把黑字放在深底上，分母几乎和背景融在一起。
+        // 反色会把透明区变成白块，所以改成给它垫一层浅色底：
+        // 保持原图黑字，只把背景提亮，对比度回到浅色模式的水平。
+        final displayed = AppColors.isDark
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: ColoredBox(
+                  color: const Color(0xFFE8E7E1),
+                  child: imageWidget,
+                ),
+              )
+            : imageWidget;
+        // 行内公式图只是题干里的一个符号（实测多为 30x28 的小图），
+        // 不需要放大看。之前它被做成可点按钮，答题页滑动滚动时手指
+        // 落在公式上就会弹出全屏对话框，把正在作答的用户打断。
+        // 块级题图（_BlockAssetImage）仍然可点放大。
+        return displayed;
       },
     );
   }
@@ -396,7 +442,11 @@ Future<void> _showImage(BuildContext context, Uint8List bytes) {
   return showDialog<void>(
     context: context,
     builder: (context) => Dialog.fullscreen(
-      backgroundColor: AppColors.ink,
+      // 查看题图的底色不能跟着主题变：浅色主题下 AppColors.ink 是深色，
+      // 而题图多为白底扫描件，深底会显得很割裂；反过来深色主题下 ink
+      // 是浅色，白底题图就贴在白底上没了边界。用固定的中性深灰，
+      // 两种主题下白底图都有明确边界。
+      backgroundColor: const Color(0xFF2A2A2A),
       child: SafeArea(
         child: Stack(
           children: [

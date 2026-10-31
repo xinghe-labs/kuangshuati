@@ -26,8 +26,8 @@ class KuangshuatiApp extends ConsumerWidget {
       // 跟随系统深浅模式同步全局色表：MaterialApp 用 darkTheme +
       // ThemeMode.system 触发整树重建，页面代码读 AppColors 拿到对应色。
       AppColors.current = media.platformBrightness == Brightness.dark
-                ? AppPalette.dark
-                : AppPalette.light;
+          ? AppPalette.dark
+          : AppPalette.light;
       return MediaQuery(
         data: media.copyWith(textScaler: TextScaler.linear(effective)),
         child: child ?? const SizedBox.shrink(),

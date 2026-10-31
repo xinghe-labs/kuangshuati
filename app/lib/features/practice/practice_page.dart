@@ -143,20 +143,23 @@ class _PracticePageState extends ConsumerState<PracticePage>
           bindings: {
             // 桌面端/Web 键盘作答：数字选选项，回车提交/下一题，方向键翻题。
             for (var i = 0; i < question.options.length && i < 4; i++)
-              SingleActivator([
-                LogicalKeyboardKey.digit1,
-                LogicalKeyboardKey.digit2,
-                LogicalKeyboardKey.digit3,
-                LogicalKeyboardKey.digit4,
-              ][i]): () => _selectOption(question.options.keys.elementAt(i)),
-            const SingleActivator(LogicalKeyboardKey.enter):
-                () => _handlePrimary(session, question, answer),
-            const SingleActivator(LogicalKeyboardKey.numpadEnter):
-                () => _handlePrimary(session, question, answer),
-            const SingleActivator(LogicalKeyboardKey.arrowLeft):
-                () => _goTo(_index - 1),
-            const SingleActivator(LogicalKeyboardKey.arrowRight):
-                () => _goTo(_index + 1),
+              SingleActivator(
+                [
+                  LogicalKeyboardKey.digit1,
+                  LogicalKeyboardKey.digit2,
+                  LogicalKeyboardKey.digit3,
+                  LogicalKeyboardKey.digit4,
+                ][i],
+              ): () =>
+                  _selectOption(question.options.keys.elementAt(i)),
+            const SingleActivator(LogicalKeyboardKey.enter): () =>
+                _handlePrimary(session, question, answer),
+            const SingleActivator(LogicalKeyboardKey.numpadEnter): () =>
+                _handlePrimary(session, question, answer),
+            const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
+                _goTo(_index - 1),
+            const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
+                _goTo(_index + 1),
           },
           child: Focus(
             autofocus: true,
@@ -164,147 +167,135 @@ class _PracticePageState extends ConsumerState<PracticePage>
               controller: _scrollController,
               padding: const EdgeInsets.fromLTRB(18, 18, 18, 30),
               children: [
-                Row(
+                // 题号/模块/多选标签/剩余时间/计时器一行放不下时，
+                // 原来的多个 Flexible + Spacer 会把“第 2 / 116 题”压成省略号，
+                // 大字号下用户直接看不到总题数。改用 Wrap 让它自动换行。
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 6,
                   children: [
-                    Flexible(
-                      child: Text(
-                        '第 ${_index + 1} / ${_rows.length} 题',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
+                    Text(
+                      '第 ${_index + 1} / ${_rows.length} 题',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    const SizedBox(width: 8),
-                    Flexible(child: AppTag(label: question.module)),
-                    if (isMultiSelect) ...[
-                      const SizedBox(width: 6),
-                      const AppTag(label: '多选'),
-                    ],
-                    const Spacer(),
+                    AppTag(label: question.module),
+                    if (isMultiSelect) const AppTag(label: '多选'),
                     // 模考剩余时间：到点自动交卷，用户需要能看到还剩多久。
                     if (deadline != null)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: Text(
-                          '剩余 ${_formatRemaining(deadline)}',
-                          style: TextStyle(
-                            color: _remainingMs(deadline) < 5 * 60 * 1000
-                                ? AppColors.negative
-                                : AppColors.ink,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            fontFeatures: const [
-                              FontFeature.tabularFigures(),
-                            ],
-                          ),
+                      Text(
+                        '剩余 ${_formatRemaining(deadline)}',
+                        style: TextStyle(
+                          color: _remainingMs(deadline) < 5 * 60 * 1000
+                              ? AppColors.negative
+                              : AppColors.ink,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                     if (ref.watch(showTimerProvider).value ?? true)
-                      Flexible(
-                        child: Text(
-                          _formatDuration(_elapsedSessionMs),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: AppColors.ink,
-                            fontSize: 12,
-                            fontFeatures: [FontFeature.tabularFigures()],
-                          ),
+                      Text(
+                        _formatDuration(_elapsedSessionMs),
+                        style: TextStyle(
+                          color: AppColors.ink,
+                          fontSize: 12,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                   ],
                 ),
-            const SizedBox(height: 14),
-            if (question.material != null)
-              Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.softFill,
-                  border: Border(
-                    left: BorderSide(color: AppColors.ink, width: 3),
+                const SizedBox(height: 14),
+                if (question.material != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.softFill,
+                      border: Border(
+                        left: BorderSide(color: AppColors.ink, width: 3),
+                      ),
+                    ),
+                    child: RichContent(
+                      question.material!,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                RichContent(
+                  question.stem,
+                  style: TextStyle(
+                    color: AppColors.ink,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    height: 1.7,
                   ),
                 ),
-                child: RichContent(
-                  question.material!,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ),
-            RichContent(
-              question.stem,
-              style: TextStyle(
-                color: AppColors.ink,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                height: 1.7,
-              ),
-            ),
-            const SizedBox(height: 18),
-            for (final entry in question.options.entries)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 9),
-                child: _OptionTile(
-                  letter: entry.key,
-                  text: entry.value,
-                  selected:
-                      _selected[question.id]?.contains(entry.key) ?? false,
-                  showResult: showResult,
-                  correct: question.correctAnswers.contains(entry.key),
-                  onTap: () => _selectOption(entry.key),
-                ),
-              ),
-            const SizedBox(height: 8),
-            // 小屏大字号下四个操作放不下一行时自动换行，避免 RenderFlex 溢出。
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 4,
-              runSpacing: 0,
-              children: [
-                TextButton.icon(
-                  onPressed: () => _toggleUncertain(question.id),
-                  icon: Icon(
-                    _uncertain.contains(question.id)
-                        ? Icons.help
-                        : Icons.help_outline,
-                    size: 18,
+                const SizedBox(height: 18),
+                for (final entry in question.options.entries)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 9),
+                    child: _OptionTile(
+                      letter: entry.key,
+                      text: entry.value,
+                      selected:
+                          _selected[question.id]?.contains(entry.key) ?? false,
+                      showResult: showResult,
+                      correct: question.correctAnswers.contains(entry.key),
+                      onTap: () => _selectOption(entry.key),
+                    ),
                   ),
-                  label: Text(
-                    _uncertain.contains(question.id) ? '已标记不确定' : '标记不确定',
+                const SizedBox(height: 8),
+                // 小屏大字号下四个操作放不下一行时自动换行，避免 RenderFlex 溢出。
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
+                  runSpacing: 0,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () => _toggleUncertain(question.id),
+                      icon: Icon(
+                        _uncertain.contains(question.id)
+                            ? Icons.help
+                            : Icons.help_outline,
+                        size: 18,
+                      ),
+                      label: Text(
+                        _uncertain.contains(question.id) ? '已标记不确定' : '标记不确定',
+                      ),
+                    ),
+                    // 跳过：不会做的题可以先翻过去，不强迫硬选一个；
+                    // 跳过的题保持未作答，不算错。
+                    TextButton.icon(
+                      onPressed: _index < _rows.length - 1
+                          ? () => _goTo(_index + 1)
+                          : null,
+                      icon: const Icon(Icons.skip_next, size: 18),
+                      label: const Text('跳过'),
+                    ),
+                    IconButton(
+                      tooltip: _favorite ? '取消收藏' : '收藏本题',
+                      onPressed: _toggleFavorite,
+                      icon: Icon(
+                        _favorite ? Icons.bookmark : Icons.bookmark_outline,
+                        size: 21,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '写笔记',
+                      onPressed: _editNote,
+                      icon: const Icon(Icons.edit_note, size: 22),
+                    ),
+                  ],
+                ),
+                if (showResult) ...[
+                  const SizedBox(height: 14),
+                  _AnswerPanel(
+                    correct: answer?.isCorrect == true,
+                    correctAnswers: question.correctAnswers,
+                    solution: question.solution,
                   ),
-                ),
-                // 跳过：不会做的题可以先翻过去，不强迫硬选一个；
-                // 跳过的题保持未作答，不算错。
-                TextButton.icon(
-                  onPressed: _index < _rows.length - 1
-                      ? () => _goTo(_index + 1)
-                      : null,
-                  icon: const Icon(Icons.skip_next, size: 18),
-                  label: const Text('跳过'),
-                ),
-                IconButton(
-                  tooltip: _favorite ? '取消收藏' : '收藏本题',
-                  onPressed: _toggleFavorite,
-                  icon: Icon(
-                    _favorite ? Icons.bookmark : Icons.bookmark_outline,
-                    size: 21,
-                  ),
-                ),
-                IconButton(
-                  tooltip: '写笔记',
-                  onPressed: _editNote,
-                  icon: const Icon(Icons.edit_note, size: 22),
-                ),
-              ],
-            ),
-            if (showResult) ...[
-              const SizedBox(height: 14),
-              _AnswerPanel(
-                correct: answer?.isCorrect == true,
-                correctAnswers: question.correctAnswers,
-                solution: question.solution,
-              ),
-            ],
+                ],
               ],
             ),
           ),
@@ -819,6 +810,14 @@ class _OptionTile extends StatelessWidget {
   final bool correct;
   final VoidCallback onTap;
 
+  /// 选项正文是否只是重复了字母（题库里图形/漫画类题的通病）。
+  ///
+  /// 实测 58890 道题里有 2975 道（约 5%）的 options 就是
+  /// `{"A":"A","B":"B",...}`——真正的选项内容全在一张题干图里。
+  /// 直接把正文渲染出来，用户看到的是“A A”“B B”这种像界面坏了的重复，
+  /// 所以改成提示去看题干图。
+  bool get _textRepeatsLetter => optionTextRepeatsLetter(letter, text);
+
   @override
   Widget build(BuildContext context) {
     final isWrongSelection = showResult && selected && !correct;
@@ -841,7 +840,8 @@ class _OptionTile extends StatelessWidget {
     //
     // 选项是「一整块可点区域」，如果不给语义，屏幕阅读器只会读到一个无名的
     // 可点元素，用户既不知道这是哪个选项，也听不到正文和选中状态。
-    final optionText = _plainMarkup(text);
+    final repeatsLetter = _textRepeatsLetter;
+    final optionText = repeatsLetter ? '见图' : _plainMarkup(text);
     final stateLabel = isCorrect
         ? '，正确答案'
         : isWrongSelection
@@ -893,21 +893,28 @@ class _OptionTile extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: RichContent(
-                    text,
-                    style: TextStyle(
-                      color: AppColors.ink,
-                      fontSize: 15,
-                      height: 1.55,
-                    ),
-                  ),
+                  child: repeatsLetter
+                      ? Text(
+                          '见题干图片',
+                          style: TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 15,
+                            height: 1.55,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        )
+                      : RichContent(
+                          text,
+                          selectable: false,
+                          style: TextStyle(
+                            color: AppColors.ink,
+                            fontSize: 15,
+                            height: 1.55,
+                          ),
+                        ),
                 ),
                 if (isCorrect)
-                  Icon(
-                    Icons.check_circle,
-                    color: AppColors.positive,
-                    size: 19,
-                  ),
+                  Icon(Icons.check_circle, color: AppColors.positive, size: 19),
                 if (isWrongSelection)
                   Icon(Icons.cancel, color: AppColors.negative, size: 19),
               ],
@@ -1130,11 +1137,24 @@ class _LegendDot extends StatelessWidget {
       children: [
         Container(width: 7, height: 7, color: color),
         const SizedBox(width: 5),
-        Text(
-          label,
-          style: TextStyle(color: AppColors.muted, fontSize: 10),
-        ),
+        Text(label, style: TextStyle(color: AppColors.muted, fontSize: 10)),
       ],
     );
   }
+}
+
+/// 选项正文是否只是重复了字母（题库里图形/漫画类题的通病）。
+///
+/// 实测 58890 道题里有 2975 道（约 5%）的 options 就是
+/// `{"A":"A","B":"B",...}`——真正的选项内容全在一张题干图里。
+/// 直接把正文渲染出来，用户看到的是“A A”“B B”这种像界面坏了的重复，
+/// 所以选项区改成提示去看题干图。
+///
+/// 不能复用 `_OptionTile._plainMarkup`：它对空正文返回“（含图片）”，
+/// 那本来就已经是提示语了，不该再被当成“只重复字母”。
+bool optionTextRepeatsLetter(String letter, String text) {
+  final withoutImages = text.replaceAll(RegExp('[-]'), '');
+  final normalized = withoutImages.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (normalized.isEmpty) return true;
+  return normalized.toUpperCase() == letter.toUpperCase();
 }

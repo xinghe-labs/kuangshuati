@@ -68,17 +68,18 @@ class _WrongPageState extends ConsumerState<WrongPage> {
             // 题目表一次性取回：顶部计数只数题库里还能打开的题，
             // 失效记录不虚报到期数量，行内也不再逐条查询。
             return FutureBuilder<Map<String, QuestionContent>>(
-              future: Future.value(
-                ref
-                    .read(contentRepositoryProvider)
-                    .questionsByIds(
-                      filtered.map((item) => item.questionId),
-                    ),
-              ).then(
-                (questions) => {
-                  for (final question in questions) question.id: question,
-                },
-              ),
+              future:
+                  Future.value(
+                    ref
+                        .read(contentRepositoryProvider)
+                        .questionsByIds(
+                          filtered.map((item) => item.questionId),
+                        ),
+                  ).then(
+                    (questions) => {
+                      for (final question in questions) question.id: question,
+                    },
+                  ),
               builder: (context, snapshot) {
                 if (snapshot.connectionState != ConnectionState.done) {
                   return const Padding(
@@ -108,7 +109,7 @@ class _WrongPageState extends ConsumerState<WrongPage> {
                             Expanded(
                               child: Text(
                                 '${dueQuestions.length} 道到期，'
-                                    '${filtered.length - dueQuestions.length} 道未到期',
+                                '${filtered.length - dueQuestions.length} 道未到期',
                                 style: TextStyle(
                                   color: AppColors.onInk,
                                   fontSize: 13,
@@ -218,83 +219,83 @@ class _ReviewRow extends ConsumerWidget {
       );
     }
     final due =
-            item.nextReviewAt != null &&
-            item.nextReviewAt! <= DateTime.now().millisecondsSinceEpoch;
-        return Container(
-          color: AppColors.surface,
-          child: InkWell(
-            onTap: onStart,
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        item.nextReviewAt != null &&
+        item.nextReviewAt! <= DateTime.now().millisecondsSinceEpoch;
+    return Container(
+      color: AppColors.surface,
+      child: InkWell(
+        onTap: onStart,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        '阶段 ${item.stage + 1} / 5',
-                        style: TextStyle(
-                          color: AppColors.muted,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 3,
-                        ),
-                        color: due && !item.mastered
-                            ? AppColors.negativeFill
-                            : AppColors.softFill,
-                        child: Text(
-                          item.mastered
-                              ? '已掌握'
-                              : due
-                              ? '今日到期'
-                              : _nextReviewLabel(item.nextReviewAt),
-                          style: TextStyle(
-                            color: due && !item.mastered
-                                ? AppColors.negative
-                                : AppColors.muted,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 9),
                   Text(
-                    question.plainStem,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium,
+                    '阶段 ${item.stage + 1} / 5',
+                    style: TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                  const SizedBox(height: 9),
-                  Row(
-                    children: [
-                      Text(
-                        '${question.module} · 错 ${item.wrongCount} 次 · 空 ${item.blankCount} 次',
-                        style: Theme.of(context).textTheme.bodySmall,
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    color: due && !item.mastered
+                        ? AppColors.negativeFill
+                        : AppColors.softFill,
+                    child: Text(
+                      item.mastered
+                          ? '已掌握'
+                          : due
+                          ? '今日到期'
+                          : _nextReviewLabel(item.nextReviewAt),
+                      style: TextStyle(
+                        color: due && !item.mastered
+                            ? AppColors.negative
+                            : AppColors.muted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
                       ),
-                      const Spacer(),
-                      TextButton.icon(
-                        onPressed: () => onMastered(!showMastered),
-                        icon: Icon(
-                          showMastered ? Icons.undo : Icons.check,
-                          size: 16,
-                        ),
-                        label: Text(showMastered ? '恢复复习' : '标记掌握'),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ),
+              const SizedBox(height: 9),
+              Text(
+                question.plainStem,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 9),
+              Row(
+                children: [
+                  Text(
+                    '${question.module} · 错 ${item.wrongCount} 次 · 空 ${item.blankCount} 次',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () => onMastered(!showMastered),
+                    icon: Icon(
+                      showMastered ? Icons.undo : Icons.check,
+                      size: 16,
+                    ),
+                    label: Text(showMastered ? '恢复复习' : '标记掌握'),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    );
   }
 
   String _nextReviewLabel(int? timestamp) {
