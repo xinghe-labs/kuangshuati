@@ -752,20 +752,53 @@ class _PracticePageState extends ConsumerState<PracticePage>
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
+                  // 图例最多有 4 项，加上「检查并交卷」按钮，在 360 宽的
+                  // 小屏上排成一行会溢出。图例单独一行并用 Wrap 兜底换行。
+                  //
+                  // 图例颜色必须和格子实际用色一致：之前“已答”画的是
+                  // AppColors.ink（黑），而格子实际用 softFill（浅灰），
+                  // 用户对着图例找颜色根本对不上。练习模式（immediate）下
+                  // 格子还会变绿/变红表示对错，图例也必须标出来，否则用户
+                  // 不知道红绿是什么意思。
+                  Wrap(
+                    spacing: 13,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      _LegendDot(label: '已答', color: AppColors.ink),
-                      const SizedBox(width: 13),
-                      _LegendDot(label: '不确定', color: AppColors.warning),
-                      const Spacer(),
-                      FilledButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _confirmFinish();
-                        },
-                        child: const Text('检查并交卷'),
+                      _LegendDot(
+                        label: '已答',
+                        color: AppColors.softFill,
+                        border: AppColors.line,
                       ),
+                      _LegendDot(
+                        label: '不确定',
+                        color: AppColors.warningFill,
+                        border: AppColors.warning,
+                      ),
+                      if (_answers.values.any((item) => item.submitted)) ...[
+                        _LegendDot(
+                          label: '答对',
+                          color: AppColors.positiveFill,
+                          border: AppColors.positive,
+                        ),
+                        _LegendDot(
+                          label: '答错',
+                          color: AppColors.negativeFill,
+                          border: AppColors.negative,
+                        ),
+                      ],
                     ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _confirmFinish();
+                      },
+                      child: const Text('检查并交卷'),
+                    ),
                   ),
                 ],
               ),
@@ -1132,16 +1165,31 @@ class _AnswerCardCell extends StatelessWidget {
 }
 
 class _LegendDot extends StatelessWidget {
-  const _LegendDot({required this.label, required this.color});
+  const _LegendDot({
+    required this.label,
+    required this.color,
+    this.border,
+  });
 
   final String label;
   final Color color;
+
+  /// 填色块外面再描一圈边框，让浅色底（positiveFill/negativeFill 这类
+  /// 极淡的底色）在白底上也能看出边界，否则图例看上去像没画东西。
+  final Color? border;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Container(width: 7, height: 7, color: color),
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            color: color,
+            border: border == null ? null : Border.all(color: border!),
+          ),
+        ),
         const SizedBox(width: 5),
         Text(label, style: TextStyle(color: AppColors.muted, fontSize: 10)),
       ],
