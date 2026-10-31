@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kuangshuati/data/content/seed_content_repository.dart';
 import 'package:kuangshuati/data/database/app_database.dart';
 import 'package:kuangshuati/domain/models.dart';
+import 'package:kuangshuati/features/backup/backup_platform.dart';
 import 'package:kuangshuati/features/backup/backup_service.dart';
 
 void main() {
@@ -217,4 +218,33 @@ void main() {
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );
+
+  test('分享备份的临时副本在下次分享前被清掉，不会无限堆积', () async {
+    // 早先每次「分享备份」都在系统临时目录写一份完整数据库副本，
+    // 分享 N 次就留 N 份，长期白占存储空间。
+    final temp = await Directory.systemTemp.createTemp('kst-share-test');
+    addTearDown(() => temp.delete(recursive: true));
+
+    // 模拟用户分享过两次，留下两份旧副本。
+    for (final name in ['kst-share-a.gkbackup', 'kst-share-b.gkbackup']) {
+      await File('${temp.path}/$name').writeAsBytes([1, 2, 3]);
+    }
+    // 同时放一个无关文件，必须不能被误删。
+    final keep = File('${temp.path}/keep.txt');
+    await keep.writeAsString('不要删我');
+
+    final removed = await pruneShareTempFiles(temp);
+
+    expect(removed, 2);
+    expect(
+      temp.listSync().map((entity) => entity.uri.pathSegments.last).toList(),
+      ['keep.txt'],
+    );
+    expect(await keep.readAsString(), '不要删我');
+  });
+
+  test('临时目录不可读时清理不抛异常', () async {
+    final missing = Directory('${Directory.systemTemp.path}/kst-not-exist-xyz');
+    expect(await pruneShareTempFiles(missing), 0);
+  });
 }
