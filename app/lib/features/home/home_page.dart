@@ -116,10 +116,29 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Future<void> _startSequence(BuildContext context, WidgetRef ref) async {
-    final questions = await ref
-        .read(contentRepositoryProvider)
-        .sequenceQuestions(limit: 100);
+    // 顺序练习要接着往后做，而不是永远从头开始：
+    // 早先固定返回题库最前面的 100 题，练完一遍后再点还是那 100 题，
+    // 题库共 58890 题却永远只能做到前 100 道。
+    final database = ref.read(databaseProvider);
+    final repository = ref.read(contentRepositoryProvider);
+    final answered = await database.answeredQuestionIds();
+    var questions = await repository.sequenceQuestions(
+      limit: 100,
+      excludeIds: answered,
+    );
+    var restart = false;
+    if (questions.isEmpty) {
+      // 题库里能做的都做完了（或题库本来就空），退回从头开始，
+      // 但明确告知用户这是重刷，而不是默默又发一批旧题。
+      questions = await repository.sequenceQuestions(limit: 100);
+      restart = true;
+    }
     if (!context.mounted) return;
+    if (restart) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('题库已全部练过一遍，这次从第一题重新开始')),
+      );
+    }
     await launchPractice(
       context,
       ref,
