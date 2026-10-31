@@ -188,14 +188,19 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 }
 
-class _ContinuePanel extends StatelessWidget {
+class _ContinuePanel extends ConsumerWidget {
   const _ContinuePanel({required this.session});
 
   final PracticeSession session;
 
   @override
-  Widget build(BuildContext context) {
-    final answered = session.currentIndex.clamp(0, session.actualCount - 1) + 1;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final position = session.currentIndex.clamp(0, session.actualCount - 1) + 1;
+    // 「已答」必须单独取：currentIndex 只是当前停留位置。用户只答 1 题、
+    // 用答题卡翻到最后一题时，只看位置会显示「第 5 / 5 题」，像练完了。
+    final submitted = ref
+        .watch(activeSessionAnsweredProvider(session.id))
+        .maybeWhen(data: (value) => value, orElse: () => null);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -206,13 +211,23 @@ class _ContinuePanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '上次练到第 $answered / ${session.actualCount} 题',
+            '上次练到第 $position / ${session.actualCount} 题',
             style: TextStyle(
               color: AppColors.onInk,
               fontSize: 18,
               fontWeight: FontWeight.w700,
               height: 1.35,
             ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            submitted == null
+                ? '正在读取已答数量…'
+                : submitted == 0
+                ? '这一组还没有提交答案'
+                : '已答 $submitted 题，还剩 '
+                      '${(session.actualCount - submitted).clamp(0, session.actualCount)} 题',
+            style: TextStyle(color: AppColors.onInkMuted, fontSize: 12),
           ),
           const SizedBox(height: 5),
           Text(
