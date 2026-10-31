@@ -381,6 +381,35 @@ class _ResultQuestion extends StatelessWidget {
             ),
             const SizedBox(height: 12),
           ],
+          // 展开后要能重新看到完整题干：折叠状态下的 title 被限制成 2 行，
+          // 长材料题的题干被截断，用户光看“正确答案：A”和一段解析，
+          // 根本回忆不起自己刚才做的是哪道题。
+          if (question.stem.trim().isNotEmpty) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: RichContent(
+                question.stem,
+                selectable: false,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          // 选项也要展开出来：用户最想知道的是“我当时为什么选错”，
+          // 只给正确答案字母和一段解析，没有选项原文，就只能凭记忆。
+          // 这里把每个选项标出“你的选择”和“正确答案”。
+          if (question.options.isNotEmpty) ...[
+            for (final entry in question.options.entries) ...[
+              _ResultOption(
+                letter: entry.key,
+                text: entry.value,
+                chosen: selected.contains(entry.key),
+                isCorrect: question.correctAnswers.contains(entry.key),
+              ),
+              const SizedBox(height: 6),
+            ],
+            const SizedBox(height: 6),
+          ],
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
@@ -396,6 +425,104 @@ class _ResultQuestion extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 结果页展开后的单个选项：标出「你的选择」和「正确答案」。
+///
+/// 用户复盘时最想知道的是「我当时为什么选错」，所以选项原文必须能重新看到，
+/// 而不是只给一个正确答案字母。
+class _ResultOption extends StatelessWidget {
+  const _ResultOption({
+    required this.letter,
+    required this.text,
+    required this.chosen,
+    required this.isCorrect,
+  });
+
+  final String letter;
+  final String text;
+  final bool chosen;
+  final bool isCorrect;
+
+  @override
+  Widget build(BuildContext context) {
+    // 和练习页保持一致的判定：正文只是重复字母时，真正的选项内容在题干图里。
+    final withoutImages = text.replaceAll(RegExp('[\uE000-\uF8FF]'), '');
+    final normalized = withoutImages.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final repeatsLetter =
+        normalized.isEmpty || normalized.toUpperCase() == letter.toUpperCase();
+    final background = isCorrect
+        ? AppColors.positiveFill
+        : chosen
+        ? AppColors.negativeFill
+        : AppColors.surface;
+    final border = isCorrect
+        ? AppColors.positive
+        : chosen
+        ? AppColors.negative
+        : AppColors.line;
+    final label = isCorrect
+        ? '正确答案'
+        : chosen
+        ? '你的选择'
+        : null;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: background,
+        border: Border.all(color: border, width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 22,
+            child: Text(
+              letter,
+              style: TextStyle(
+                color: AppColors.ink,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: repeatsLetter
+                ? Text(
+                    '见题干图片',
+                    style: TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 14,
+                      height: 1.5,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  )
+                : RichContent(
+                    text,
+                    selectable: false,
+                    style: TextStyle(
+                      color: AppColors.ink,
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
+                  ),
+          ),
+          if (label != null) ...[
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isCorrect ? AppColors.positive : AppColors.negative,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ],
       ),
     );

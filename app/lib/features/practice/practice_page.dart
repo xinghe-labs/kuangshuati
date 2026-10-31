@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/keep_screen_on.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/database/app_database.dart' as db;
@@ -46,12 +47,17 @@ class _PracticePageState extends ConsumerState<PracticePage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // 做题期间屏幕常亮：长材料题很容易超过系统息屏时间（默认 30 秒），
+    // 屏幕黑掉后要重新解锁，作答节奏被直接打断。
+    KeepScreenOn.enable();
     _load();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // 一定要关掉，否则用户退出做题后整台手机都不息屏、白耗电。
+    KeepScreenOn.disable();
     _ticker?.cancel();
     _scrollController.dispose();
     super.dispose();
