@@ -20,6 +20,11 @@ const int kDefaultPracticeCount = 20;
 ///
 /// 已作答不足 [kWeakModuleMinAnswered] 道的模块不参与评选，
 /// 避免“3 题错 1 题”被说成薄弱模块；没有合格模块时返回 null。
+///
+/// 排序先比正确率，正确率相同时比作答量：
+/// 早先只比正确率，两个模块都是 100% 时会返回排序靠前的那个，
+/// 于是“答了 200 道全对”和“答了 10 道全对”被同等对待，
+/// 甚至刚做满 10 道的模块会被判成“当前最需要补强”。
 ModuleStat? weakestModule(List<ModuleStat> modules) {
   final eligible =
       modules
@@ -28,7 +33,10 @@ ModuleStat? weakestModule(List<ModuleStat> modules) {
         ..sort((a, b) {
           final aRate = a.correctCount / a.answeredCount;
           final bRate = b.correctCount / b.answeredCount;
-          return aRate.compareTo(bRate);
+          final byRate = aRate.compareTo(bRate);
+          if (byRate != 0) return byRate;
+          // 正确率相同：作答越多说明样本越可靠，优先当作弱项。
+          return b.answeredCount.compareTo(a.answeredCount);
         });
   return eligible.isEmpty ? null : eligible.first;
 }

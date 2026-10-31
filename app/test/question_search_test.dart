@@ -67,4 +67,45 @@ void main() {
   test('搜不到时返回空列表而不是抛异常', () async {
     expect(await repository.searchQuestions('这串字题库里绝对没有zzzz'), isEmpty);
   });
+
+  test('英文缩写不区分大小写：用户照题干里的 GDP 去搜要能命中', () async {
+    // 题库里 GDP 出现 93 次（APP 32 次、AI 132 次）。界面会把输入先
+    // toLowerCase，而 SQL 的 instr 大小写敏感，于是搜“GDP”实际查“gdp”，
+    // 命中 0 条，用户会以为题库里没有这道题。
+    for (final query in ['GDP', 'gdp', 'Gdp']) {
+      final results = await repository.searchQuestions(query);
+      expect(results, isNotEmpty, reason: '搜「$query」应该有结果');
+    }
+    final upper = await repository.searchQuestions('GDP');
+    final lower = await repository.searchQuestions('gdp');
+    expect(upper.length, lower.length, reason: '大小写不同不应改变命中数');
+  });
+
+  test('结果按年份倒序，最新年份的题排在前面', () async {
+    final results = await repository.searchQuestions('下列');
+    expect(results, isNotEmpty);
+    final years = [
+      for (final question in results)
+        int.tryParse(question.id.split('_').first.replaceAll('src', '')) ?? 0,
+    ];
+    // 年份不在 id 里，改从数据库核对首条与末条的年份。
+    final ids = results.map((question) => question.id).toList();
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final rows = database.select(
+      'SELECT id, year FROM questions WHERE id IN ($placeholders)',
+      ids,
+    );
+    final yearById = {
+      for (final row in rows) row['id'] as String: row['year'] as int,
+    };
+    final orderedYears = [for (final id in ids) yearById[id] ?? 0];
+    for (var i = 1; i < orderedYears.length; i++) {
+      expect(
+        orderedYears[i] <= orderedYears[i - 1],
+        isTrue,
+        reason: '第 $i 条的年份 ${orderedYears[i]} 不应大于前一条 ${orderedYears[i - 1]}',
+      );
+    }
+    expect(years, hasLength(results.length));
+  });
 }
