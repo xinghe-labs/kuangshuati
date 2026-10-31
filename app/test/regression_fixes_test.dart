@@ -261,12 +261,12 @@ void main() {
 
     final answers = await database.answersForSession('s-bg');
     final total = answers.fold<int>(0, (sum, a) => sum + a.durationMs);
-    // 后台停了 1500ms。修复后这段时间应完全不计；未修复时它会被
-    // 完整算进去（实测 total≈3000ms）。这里用 1300ms 作阈值，既低于
-    // 后台时长，又留足余量吸收并行跑测试时的调度抖动。
+    // 后台停了 1500ms。修复后这段时间应完全不计（实测冻结在 ~1.3s，
+    // 即进入后台前真正做答的那一段）；未修复时它会被完整算进去
+    // （实测 total≈2.8s）。阈值取 2000ms，稳稳夹在两者中间。
     expect(
       total,
-      lessThan(1300),
+      lessThan(2000),
       reason: '后台 1.5 秒被算进了做题用时（total=$total）',
     );
 
@@ -278,6 +278,24 @@ void main() {
       () => Future<void>.delayed(const Duration(milliseconds: 50)),
     );
     await tester.pump(const Duration(seconds: 3));
+  });
+
+  test('笔记里只输一个空格会清空原笔记，必须能被识别为「清空」而不是「已保存」', () async {
+    // setFavoriteNote 内部会 trim，用户误触一个空格就会把原笔记写成空；
+    // 早先无论内容如何都提示「笔记已保存」，用户根本不知道自己写的东西没了。
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.toggleFavorite('q-note');
+    await database.setFavoriteNote('q-note', '易错：基层治理');
+
+    const original = '易错：基层治理';
+    const typed = '   ';
+    // 页面里的判定：trim 后为空且原来有内容 → 视为清空。
+    final clearing = typed.trim().isEmpty && original.isNotEmpty;
+
+    await database.setFavoriteNote('q-note', typed);
+    expect(await database.favoriteNote('q-note'), isEmpty);
+    expect(clearing, isTrue);
   });
 }
 

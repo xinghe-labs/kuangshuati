@@ -705,9 +705,8 @@ class _PracticePageState extends ConsumerState<PracticePage>
     final question = _currentQuestion;
     if (question == null) return;
     final database = ref.read(databaseProvider);
-    final controller = TextEditingController(
-      text: await database.favoriteNote(question.id),
-    );
+    final original = await database.favoriteNote(question.id);
+    final controller = TextEditingController(text: original);
     if (!mounted) {
       controller.dispose();
       return;
@@ -737,13 +736,21 @@ class _PracticePageState extends ConsumerState<PracticePage>
     );
     controller.dispose();
     if (note == null) return;
+    // 清空笔记（包括误触空格）必须明确告诉用户：
+    // setFavoriteNote 会把内容 trim 后写入，只输一个空格等于把原笔记
+    // 删了；如果还提示“笔记已保存”，用户根本不知道自己写的东西没了。
+    final clearing = note.trim().isEmpty && original.isNotEmpty;
     await database.setFavoriteNote(question.id, note);
     if (!mounted) return;
     // 写笔记不再强制收藏：笔记和收藏是两回事，
     // 题目页的收藏图标状态保持用户自己的选择。
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('笔记已保存，可在题库页「笔记」里查看')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          clearing ? '笔记已清空' : '笔记已保存，可在题库页「笔记」里查看',
+        ),
+      ),
+    );
   }
 
   /// 退出练习前的确认。
