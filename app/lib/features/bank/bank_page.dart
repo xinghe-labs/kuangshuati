@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../data/database/app_database.dart' show Favorite;
 import '../../domain/models.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../practice/practice_launcher.dart';
@@ -52,9 +53,11 @@ class _BankPageState extends ConsumerState<BankPage> {
                   onChanged: (value) => setState(() => _query = value),
                   textInputAction: TextInputAction.search,
                   decoration: InputDecoration(
-                    hintText: _scope == _BankScope.papers
-                        ? '搜索年份、地区或试卷'
-                        : '搜索收藏题目',
+                    hintText: switch (_scope) {
+                      _BankScope.papers => '搜索年份、地区或试卷',
+                      _BankScope.favorites => '搜索收藏题目',
+                      _BankScope.notes => '搜索笔记内容',
+                    },
                     prefixIcon: const Icon(Icons.search, size: 20),
                     suffixIcon: _query.isEmpty
                         ? null
@@ -81,6 +84,11 @@ class _BankPageState extends ConsumerState<BankPage> {
                       label: Text('收藏'),
                       icon: Icon(Icons.bookmark_outline, size: 17),
                     ),
+                    ButtonSegment(
+                      value: _BankScope.notes,
+                      label: Text('笔记'),
+                      icon: Icon(Icons.sticky_note_2_outlined, size: 17),
+                    ),
                   ],
                   selected: {_scope},
                   showSelectedIcon: false,
@@ -93,9 +101,20 @@ class _BankPageState extends ConsumerState<BankPage> {
             ),
           ),
           Expanded(
-            child: _scope == _BankScope.papers
-                ? _PaperList(query: normalized, onStart: _startPaper)
-                : _FavoriteList(query: normalized, onStart: _startFavorite),
+            child: switch (_scope) {
+              _BankScope.papers => _PaperList(
+                query: normalized,
+                onStart: _startPaper,
+              ),
+              _BankScope.favorites => _FavoriteList(
+                query: normalized,
+                onStart: _startFavorite,
+              ),
+              _BankScope.notes => _NoteList(
+                query: normalized,
+                onStart: _startFavorite,
+              ),
+            },
           ),
         ],
       ),
@@ -130,7 +149,7 @@ class _BankPageState extends ConsumerState<BankPage> {
   }
 }
 
-enum _BankScope { papers, favorites }
+enum _BankScope { papers, favorites, notes }
 
 class _PaperList extends ConsumerWidget {
   const _PaperList({required this.query, required this.onStart});
@@ -205,8 +224,8 @@ class _PaperRow extends StatelessWidget {
                 color: AppColors.ink,
                 child: Text(
                   '${paper.year}',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: AppColors.onInk,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
@@ -223,7 +242,8 @@ class _PaperRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      '${paper.region} · ${paper.paperType} · 120 分钟',
+                      '${paper.region} · ${paper.paperType} · '
+                          '${paper.durationSeconds ~/ 60} 分钟',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -255,6 +275,10 @@ class _FavoriteList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final favorites = ref.watch(favoritesProvider);
+    final noteById = {
+      for (final item in favorites.value ?? const <Favorite>[])
+        item.questionId: item.note,
+    };
     return favorites.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => Text('读取收藏失败：$error'),
@@ -317,9 +341,29 @@ class _FavoriteList extends ConsumerWidget {
                         ),
                         subtitle: Padding(
                           padding: const EdgeInsets.only(top: 5),
-                          child: Text(
-                            '${question.module} · 第 ${question.sequence} 题',
-                            style: Theme.of(context).textTheme.bodySmall,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${question.module} · 第 ${question.sequence} 题',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                              // 收藏列表里直接看到自己写的笔记，
+                              // 不用再点进题目才能回看。
+                              if (noteById[question.id]?.isNotEmpty == true)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    '笔记：${noteById[question.id]}',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: AppColors.positive,
+                                        ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                         trailing: IconButton(
@@ -327,10 +371,129 @@ class _FavoriteList extends ConsumerWidget {
                           onPressed: () => ref
                               .read(databaseProvider)
                               .toggleFavorite(question.id),
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.bookmark,
                             size: 20,
                             color: AppColors.ink,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// 笔记列表：所有写过笔记的题（无论是否收藏），支持直接开练和删除笔记。
+class _NoteList extends ConsumerWidget {
+  const _NoteList({required this.query, required this.onStart});
+
+  final String query;
+  final Future<void> Function(List<QuestionContent> questions) onStart;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final notes = ref.watch(notesProvider);
+    return notes.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, stack) => Text('读取笔记失败：$error'),
+      data: (items) {
+        final loaded = ref
+            .read(contentRepositoryProvider)
+            .questionsByIds(items.map((item) => item.questionId));
+        final noteById = {for (final item in items) item.questionId: item.note};
+        return FutureBuilder<List<QuestionContent>>(
+          future: Future.value(loaded),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return Text('读取笔记失败：${snapshot.error}');
+            }
+            final questions = (snapshot.data ?? const <QuestionContent>[])
+                .where(
+                  (question) =>
+                      query.isEmpty ||
+                      question.plainStem.toLowerCase().contains(query) ||
+                      (noteById[question.id] ?? '').toLowerCase().contains(
+                            query,
+                          ),
+                )
+                .toList(growable: false);
+            if (questions.isEmpty) {
+              return ListView(
+                children: [
+                  AppEmptyState(
+                    title: query.isEmpty ? '还没有笔记' : '没有匹配的笔记',
+                    message: query.isEmpty
+                        ? '做题时点一下便签图标，就能给题目记笔记。'
+                        : '换一个题干或笔记关键词试试。',
+                  ),
+                ],
+              );
+            }
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 28),
+              children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    onPressed: () => onStart(questions),
+                    icon: const Icon(Icons.play_arrow, size: 18),
+                    label: Text('复习全部 ${questions.length} 题'),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                HairlineList(
+                  children: [
+                    for (final question in questions)
+                      ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 7,
+                        ),
+                        title: Text(
+                          question.plainStem,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 5),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${question.module} · 第 ${question.sequence} 题',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  noteById[question.id] ?? '',
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: AppColors.positive),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        trailing: IconButton(
+                          tooltip: '删除笔记',
+                          onPressed: () => ref
+                              .read(databaseProvider)
+                              .setFavoriteNote(question.id, ''),
+                          icon: Icon(
+                            Icons.delete_outline,
+                            size: 20,
+                            color: AppColors.muted,
                           ),
                         ),
                       ),

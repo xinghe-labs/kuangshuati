@@ -65,57 +65,89 @@ class _WrongPageState extends ConsumerState<WrongPage> {
               );
             }
             final now = DateTime.now().millisecondsSinceEpoch;
-            final dueQuestions = filtered
-                .where(
-                  (item) =>
-                      !item.mastered &&
-                      (item.nextReviewAt == null || item.nextReviewAt! <= now),
-                )
-                .map((item) => item.questionId);
-            return Column(
-              children: [
-                if (!_showMastered)
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    color: AppColors.ink,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${dueQuestions.length} 道到期，${filtered.length - dueQuestions.length} 道未到期',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: dueQuestions.isEmpty
-                              ? null
-                              : () => _start(dueQuestions),
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            disabledForegroundColor: const Color(0xFF777771),
-                          ),
-                          child: const Text('开始复习'),
-                        ),
-                      ],
+            // 题目表一次性取回：顶部计数只数题库里还能打开的题，
+            // 失效记录不虚报到期数量，行内也不再逐条查询。
+            return FutureBuilder<Map<String, QuestionContent>>(
+              future: Future.value(
+                ref
+                    .read(contentRepositoryProvider)
+                    .questionsByIds(
+                      filtered.map((item) => item.questionId),
                     ),
-                  ),
-                const SizedBox(height: 12),
-                for (final item in filtered) ...[
-                  _ReviewRow(
-                    item: item,
-                    showMastered: _showMastered,
-                    onStart: () => _start([item.questionId]),
-                    onMastered: (value) => ref
-                        .read(databaseProvider)
-                        .markReviewMastered(item.questionId, value),
-                  ),
-                  const SizedBox(height: 9),
-                ],
-              ],
+              ).then(
+                (questions) => {
+                  for (final question in questions) question.id: question,
+                },
+              ),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final questions =
+                    snapshot.data ?? const <String, QuestionContent>{};
+                final dueQuestions = filtered
+                    .where(
+                      (item) =>
+                          questions.containsKey(item.questionId) &&
+                          !item.mastered &&
+                          (item.nextReviewAt == null ||
+                              item.nextReviewAt! <= now),
+                    )
+                    .map((item) => item.questionId);
+                return Column(
+                  children: [
+                    if (!_showMastered)
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        color: AppColors.ink,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${dueQuestions.length} 道到期，'
+                                    '${filtered.length - dueQuestions.length} 道未到期',
+                                style: TextStyle(
+                                  color: AppColors.onInk,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: dueQuestions.isEmpty
+                                  ? null
+                                  : () => _start(dueQuestions),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.onInk,
+                                disabledForegroundColor: AppColors.onInkMuted,
+                              ),
+                              child: const Text('开始复习'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                    for (final item in filtered) ...[
+                      _ReviewRow(
+                        item: item,
+                        question: questions[item.questionId],
+                        showMastered: _showMastered,
+                        onStart: () => _start([item.questionId]),
+                        onMastered: (value) => ref
+                            .read(databaseProvider)
+                            .markReviewMastered(item.questionId, value),
+                        onDelete: () => ref
+                            .read(databaseProvider)
+                            .deleteReviewItems([item.questionId]),
+                      ),
+                      const SizedBox(height: 9),
+                    ],
+                  ],
+                );
+              },
             );
           },
         ),
@@ -139,33 +171,53 @@ class _WrongPageState extends ConsumerState<WrongPage> {
 class _ReviewRow extends ConsumerWidget {
   const _ReviewRow({
     required this.item,
+    required this.question,
     required this.showMastered,
     required this.onStart,
     required this.onMastered,
+    required this.onDelete,
   });
 
   final ReviewItem item;
+  final QuestionContent? question;
   final bool showMastered;
   final VoidCallback onStart;
   final ValueChanged<bool> onMastered;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final future = Future.value(
-      ref.read(contentRepositoryProvider).findQuestion(item.questionId),
-    );
-    return FutureBuilder<QuestionContent?>(
-      future: future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const SizedBox(
-            height: 100,
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-        final question = snapshot.data;
-        if (question == null) return const SizedBox.shrink();
-        final due =
+    final question = this.question;
+    if (question == null) {
+      // 题库换版后该题已不存在：不再隐藏成空白行，
+      // 让用户看到原因并可手动清理这条记录。
+      return Container(
+        color: AppColors.surface,
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '题目已随题库更新失效',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    '这条错题记录已无法复习，可以从错题本中清理。',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            TextButton(onPressed: onDelete, child: const Text('清理')),
+          ],
+        ),
+      );
+    }
+    final due =
             item.nextReviewAt != null &&
             item.nextReviewAt! <= DateTime.now().millisecondsSinceEpoch;
         return Container(
@@ -181,7 +233,7 @@ class _ReviewRow extends ConsumerWidget {
                     children: [
                       Text(
                         '阶段 ${item.stage + 1} / 5',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppColors.muted,
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
@@ -240,11 +292,9 @@ class _ReviewRow extends ConsumerWidget {
                   ),
                 ],
               ),
-            ),
           ),
-        );
-      },
-    );
+        ),
+      );
   }
 
   String _nextReviewLabel(int? timestamp) {

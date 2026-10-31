@@ -198,7 +198,7 @@ class _ContinuePanel extends StatelessWidget {
     final answered = session.currentIndex.clamp(0, session.actualCount - 1) + 1;
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.ink,
         borderRadius: BorderRadius.all(Radius.circular(8)),
       ),
@@ -207,8 +207,8 @@ class _ContinuePanel extends StatelessWidget {
         children: [
           Text(
             '上次练到第 $answered / ${session.actualCount} 题',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppColors.onInk,
               fontSize: 18,
               fontWeight: FontWeight.w700,
               height: 1.35,
@@ -217,13 +217,13 @@ class _ContinuePanel extends StatelessWidget {
           const SizedBox(height: 5),
           Text(
             session.title,
-            style: const TextStyle(color: Color(0xFFBDBDB7), fontSize: 12),
+            style: TextStyle(color: AppColors.onInkMuted, fontSize: 12),
           ),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: () => context.push('/practice/${session.id}'),
             style: FilledButton.styleFrom(
-              backgroundColor: Colors.white,
+              backgroundColor: AppColors.onInk,
               foregroundColor: AppColors.ink,
             ),
             child: const Row(
@@ -251,25 +251,25 @@ class _StartPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.ink,
         borderRadius: BorderRadius.all(Radius.circular(8)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             '还没有正在进行的练习',
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.onInk,
               fontSize: 20,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             '先做一组 20 题，系统会从第一道错题开始安排复习。',
-            style: TextStyle(color: Color(0xFFC9C9C3), fontSize: 13),
+            style: TextStyle(color: AppColors.onInkMuted, fontSize: 13),
           ),
           const SizedBox(height: 16),
           Row(
@@ -278,7 +278,7 @@ class _StartPanel extends StatelessWidget {
                 child: FilledButton(
                   onPressed: onRandom,
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.white,
+                    backgroundColor: AppColors.onInk,
                     foregroundColor: AppColors.ink,
                   ),
                   child: const Text('随机开始'),
@@ -289,8 +289,8 @@ class _StartPanel extends StatelessWidget {
                 child: OutlinedButton(
                   onPressed: onSequence,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Color(0xFF777771)),
+                    foregroundColor: AppColors.onInk,
+                    side: BorderSide(color: AppColors.muted),
                   ),
                   child: const Text('顺序练习'),
                 ),
@@ -313,11 +313,14 @@ class _ActionGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth >= 620 ? 4 : 2;
+        // 卡片高度随系统字号线性放大，避免大字号下标题/描述溢出。
+        final textScale = MediaQuery.textScalerOf(context).scale(1.0);
         return GridView.count(
           crossAxisCount: columns,
           crossAxisSpacing: 10,
           mainAxisSpacing: 10,
-          childAspectRatio: columns == 4 ? 1.35 : 1.18,
+          mainAxisExtent:
+              (columns == 4 ? 100 : 118) * textScale.clamp(0.8, 2.0),
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           children: children,
@@ -347,7 +350,7 @@ class _ActionTile extends StatelessWidget {
     return Material(
       color: AppColors.surface,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: AppColors.line),
+        side: BorderSide(color: AppColors.line),
         borderRadius: BorderRadius.circular(8),
       ),
       child: InkWell(
@@ -362,7 +365,7 @@ class _ActionTile extends StatelessWidget {
                 children: [
                   Text(
                     index,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppColors.muted,
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
@@ -468,7 +471,7 @@ class _ErrorBlock extends StatelessWidget {
       color: AppColors.negativeFill,
       child: Text(
         '读取练习记录失败：$error',
-        style: const TextStyle(color: AppColors.negative, fontSize: 13),
+        style: TextStyle(color: AppColors.negative, fontSize: 13),
       ),
     );
   }

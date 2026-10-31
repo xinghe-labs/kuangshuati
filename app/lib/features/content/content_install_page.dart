@@ -14,8 +14,6 @@ class ContentInstallPage extends ConsumerStatefulWidget {
 }
 
 class _ContentInstallPageState extends ConsumerState<ContentInstallPage> {
-  bool _autoStartAttempted = false;
-
   @override
   void initState() {
     super.initState();
@@ -30,11 +28,41 @@ class _ContentInstallPageState extends ConsumerState<ContentInstallPage> {
     if (!manager.hasManifest) {
       manager.checkForManifest();
     }
-    // 未安装题库时进入页面自动开始下载，下载进度照常展示。
-    if (!manager.hasFullContent && !_autoStartAttempted) {
-      _autoStartAttempted = true;
-      manager.downloadAndInstall();
+    // 题库包很大且会消耗流量，不再静默自动下载：
+    // 先拿到清单，然后由用户确认后再开始。
+  }
+
+  Future<void> _confirmAndDownload() async {
+    final manager = ref.read(contentManagerProvider);
+    if (!manager.hasManifest) {
+      await manager.checkForManifest();
+      if (!mounted) return;
+      if (!manager.hasManifest) return;
     }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          manager.hasFullContent ? '下载题库更新？' : '下载离线题库？',
+        ),
+        content: const Text(
+          '安装包约 140MB，建议在 Wi-Fi 环境下下载；'
+          '使用移动网络可能产生较多流量费用。'
+          '下载完成后做题全程离线可用。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('暂不下载'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('开始下载'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await manager.downloadAndInstall();
   }
 
   @override
@@ -89,7 +117,7 @@ class _ContentInstallPageState extends ConsumerState<ContentInstallPage> {
                         children: [
                           Text(
                             manager.errorMessage!,
-                            style: const TextStyle(color: AppColors.negative),
+                            style: TextStyle(color: AppColors.negative),
                           ),
                           // 原文只给调试构建看：发布版不把 SocketException、
                           // 本机端口这类信息倒给用户。与主文案重复时不展示，
@@ -100,7 +128,7 @@ class _ContentInstallPageState extends ConsumerState<ContentInstallPage> {
                             const SizedBox(height: 8),
                             Text(
                               manager.errorDetail!,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppColors.muted,
                                 fontSize: 11,
                               ),
@@ -115,7 +143,7 @@ class _ContentInstallPageState extends ConsumerState<ContentInstallPage> {
                     onPressed: checking || downloading
                         ? null
                         : manifest
-                        ? manager.downloadAndInstall
+                        ? _confirmAndDownload
                         : manager.checkForManifest,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 13),
