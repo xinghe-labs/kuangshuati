@@ -76,7 +76,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/result/:sessionId',
         builder: (context, state) {
-          return ResultPage(sessionId: state.pathParameters['sessionId']!);
+          return ResultPage(
+            sessionId: state.pathParameters['sessionId']!,
+            timedOut: state.uri.queryParameters['timedOut'] == '1',
+          );
         },
       ),
     ],
