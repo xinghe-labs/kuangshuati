@@ -177,11 +177,15 @@ enum _BankScope { papers, questions, favorites, notes }
 ///
 /// 搜索词为空时不查库（返回空列表），避免一进题库页就把 58890 道题
 /// 全拉出来。key 带上 limit，搜索词变化时自动重新请求。
+const questionSearchLimit = 200;
+
 final questionSearchProvider =
     FutureProvider.family<List<QuestionContent>, String>((ref, query) {
       if (query.trim().isEmpty) return Future.value(const []);
       return Future.value(
-        ref.watch(contentRepositoryProvider).searchQuestions(query),
+        ref
+            .watch(contentRepositoryProvider)
+            .searchQuestions(query, limit: questionSearchLimit),
       );
     });
 
@@ -360,14 +364,22 @@ class _QuestionSearchList extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      '找到 ${questions.length} 道题',
+                      // 命中数到上限时，实际命中可能远不止这些，
+                      // 直接写“找到 200 道题”会让用户以为题库里只有 200 道。
+                      questions.length >= questionSearchLimit
+                          ? '匹配很多，先显示前 $questionSearchLimit 道题'
+                          : '找到 ${questions.length} 道题',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
                   FilledButton.icon(
                     onPressed: () => onStart(questions),
                     icon: const Icon(Icons.play_arrow, size: 18),
-                    label: Text('练习这 ${questions.length} 题'),
+                    label: Text(
+                      questions.length >= questionSearchLimit
+                          ? '练习这 $questionSearchLimit 题'
+                          : '练习这 ${questions.length} 题',
+                    ),
                   ),
                 ],
               ),

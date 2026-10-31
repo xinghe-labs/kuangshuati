@@ -192,14 +192,20 @@ void main() {
 
   test('字号合并取较大值：设置里选“小”不会被系统大字号拖回去', () {
     // 之前是相乘：1.3 × 0.9 = 1.17，用户选了“小”字反而更大，设置项形同虚设。
-    expect(effectiveTextScale(0.9, 1.3), 1.3);
-    expect(effectiveTextScale(0.9, 1.0), 1.0);
-    // 选“大”时尊重用户选择，不被系统小字号压回去。
-    expect(effectiveTextScale(1.15, 1.0), 1.15);
-    expect(effectiveTextScale(1.15, 0.85), 1.15);
+    // 也不能简单取 max：max(0.9, 1.0) = 1.0 会把“小”吃掉，
+    // 用户点了“小”却看不到任何变化。
+    // 现在：设置值在系统值基础上按比例生效（乘以“设置 ÷ 标准 1.0”）。
+    expect(effectiveTextScale(0.9, 1.3), closeTo(1.17, 1e-9));
+    expect(effectiveTextScale(0.9, 1.0), closeTo(0.9, 1e-9));
+    // 选“大”时同样生效。
+    expect(effectiveTextScale(1.15, 1.0), closeTo(1.15, 1e-9));
+    expect(effectiveTextScale(1.15, 1.3), closeTo(1.495, 1e-9));
     // 上下限仍然生效，避免极端组合把布局撑破。
     expect(effectiveTextScale(3.0, 3.0), 1.6);
     expect(effectiveTextScale(0.1, 0.1), 0.85);
+    // 系统字号保持不变（1.0）时，设置里的三档必须真的产生三个不同的值。
+    expect(effectiveTextScale(0.9, 1.0), lessThan(effectiveTextScale(1.0, 1.0)));
+    expect(effectiveTextScale(1.15, 1.0), greaterThan(effectiveTextScale(1.0, 1.0)));
   });
 
   testWidgets('切到后台的时间不计入做题用时', (tester) async {
