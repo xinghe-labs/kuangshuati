@@ -801,9 +801,14 @@ class AppDatabase extends _$AppDatabase {
       return;
     }
 
+    // 用户自己标了“不确定”，说明他也没把握。结果页会告诉他“已加入明天的
+    // 复习计划”，所以这里必须真的排到明天（stage 回到 0），
+    // 不能因为蒙对就推进到 3 天/7 天后，否则结果页的承诺就是假的。
     final currentStage = existing?.stage ?? 0;
-    final nextStage = isCorrect ? (currentStage + 1).clamp(0, 4) : 0;
-    final mastered = isCorrect && nextStage >= 4;
+    final nextStage = isCorrect
+        ? (uncertain ? 0 : (currentStage + 1).clamp(0, 4))
+        : 0;
+    final mastered = isCorrect && !uncertain && nextStage >= 4;
     final intervalDays = const [1, 3, 7, 15, 30][nextStage];
     await into(reviewItems).insertOnConflictUpdate(
       ReviewItemsCompanion.insert(
@@ -818,7 +823,9 @@ class AppDatabase extends _$AppDatabase {
               : now.add(Duration(days: intervalDays)).millisecondsSinceEpoch,
         ),
         mastered: Value(mastered),
-        lastResult: Value(isCorrect ? 'correct' : 'wrong'),
+        lastResult: Value(
+          uncertain ? 'uncertain' : (isCorrect ? 'correct' : 'wrong'),
+        ),
         updatedAt: now.millisecondsSinceEpoch,
       ),
     );
