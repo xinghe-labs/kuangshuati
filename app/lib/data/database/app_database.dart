@@ -633,7 +633,13 @@ class AppDatabase extends _$AppDatabase {
 
         // 未作答的题只落答案记录，不进错题本：
         // 白卷、翻完没做的题不应该被当成“做错”来复习。
-        if (blank) continue;
+        // 但若这题已经在错题本里（之前错/空过），仍要累计一次“空”次数：
+        // 错题本每行都写着“空 N 次”，而早先 blankCount 从未被写入过，
+        // 无论空多少次都恒显“空 0 次”。
+        if (blank) {
+          await _recordBlank(questionId: row.questionId, now: now);
+          continue;
+        }
         await _updateReview(
           question: question,
           isCorrect: isCorrect,
@@ -732,6 +738,26 @@ class AppDatabase extends _$AppDatabase {
       )..where((row) => row.questionId.equals(id))).go();
     }
     return deleted;
+  }
+
+  /// 已存在的错题记录累计一次“空”。不存在时什么也不做：
+  /// 空白不把题拉进错题本，只是如实记录“这题我又空了一次”。
+  Future<void> _recordBlank({
+    required String questionId,
+    required DateTime now,
+  }) async {
+    final existing = await (select(
+      reviewItems,
+    )..where((row) => row.questionId.equals(questionId))).getSingleOrNull();
+    if (existing == null) return;
+    await (update(
+      reviewItems,
+    )..where((row) => row.questionId.equals(questionId))).write(
+      ReviewItemsCompanion(
+        blankCount: Value(existing.blankCount + 1),
+        updatedAt: Value(now.millisecondsSinceEpoch),
+      ),
+    );
   }
 
   Future<void> _updateReview({
