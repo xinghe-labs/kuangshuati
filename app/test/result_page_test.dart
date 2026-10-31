@@ -120,4 +120,34 @@ void main() {
     expect(find.textContaining('错误 · 你的答案 Z'), findsOneWidget);
     expect(find.textContaining('未作答 ·'), findsWidgets);
   });
+
+  testWidgets('结果页展开后能看到选项原文，而不只是正确答案字母', (tester) async {
+    // 用户复盘时最想知道「我当时为什么选错」。之前展开后只有材料、正确答案、
+    // 解析，没有选项原文，用户只能凭记忆。
+    tester.view.physicalSize = const Size(1200, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final sessionId = await seedSession(PracticeMode.sequence);
+    await pumpResult(tester, sessionId);
+
+    // 展开第二道题（这道是答错的，选 Z）。
+    await tester.tap(find.byType(ExpansionTile).at(1));
+    await tester.pumpAndSettle();
+
+    // 展开后必须能看到选项原文（SeedContentRepository 的选项是「选项A」这类
+    // 文字），否则用户只能凭记忆回想自己当时为什么选错。
+    final second = questions[1];
+    expect(second.options.isNotEmpty, isTrue);
+    for (final text in second.options.values) {
+      expect(
+        find.textContaining(text.replaceAll(RegExp('[-]'), '')),
+        findsWidgets,
+        reason: '选项原文「$text」应出现在展开内容里',
+      );
+    }
+    // 正确选项要打上「正确答案」标签。
+    expect(find.text('正确答案'), findsWidgets);
+  });
 }

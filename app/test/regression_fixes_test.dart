@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kuangshuati/core/theme/app_theme.dart';
 import 'package:kuangshuati/data/content/seed_content_repository.dart';
 import 'package:kuangshuati/data/database/app_database.dart';
+import 'package:kuangshuati/app.dart' show effectiveTextScale;
 import 'package:kuangshuati/domain/models.dart';
 import 'package:kuangshuati/features/practice/practice_page.dart'
     show optionTextRepeatsLetter;
@@ -184,5 +185,17 @@ void main() {
     expect(optionTextRepeatsLetter('A', '是推进中国式现代化的生力军'), isFalse);
     expect(optionTextRepeatsLetter('A', 'A项表述过于绝对'), isFalse);
     expect(optionTextRepeatsLetter('B', '正确'), isFalse);
+  });
+
+  test('字号合并取较大值：设置里选“小”不会被系统大字号拖回去', () {
+    // 之前是相乘：1.3 × 0.9 = 1.17，用户选了“小”字反而更大，设置项形同虚设。
+    expect(effectiveTextScale(0.9, 1.3), 1.3);
+    expect(effectiveTextScale(0.9, 1.0), 1.0);
+    // 选“大”时尊重用户选择，不被系统小字号压回去。
+    expect(effectiveTextScale(1.15, 1.0), 1.15);
+    expect(effectiveTextScale(1.15, 0.85), 1.15);
+    // 上下限仍然生效，避免极端组合把布局撑破。
+    expect(effectiveTextScale(3.0, 3.0), 1.6);
+    expect(effectiveTextScale(0.1, 0.1), 0.85);
   });
 }

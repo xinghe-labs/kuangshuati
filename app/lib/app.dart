@@ -22,7 +22,7 @@ class KuangshuatiApp extends ConsumerWidget {
     Widget applyTextScale(BuildContext context, Widget? child) {
       final media = MediaQuery.of(context);
       final systemScale = media.textScaler.scale(1.0);
-      final effective = (scale * systemScale).clamp(0.9, 1.6);
+      final effective = effectiveTextScale(scale, systemScale);
       // 跟随系统深浅模式同步全局色表：MaterialApp 用 darkTheme +
       // ThemeMode.system 触发整树重建，页面代码读 AppColors 拿到对应色。
       AppColors.current = media.platformBrightness == Brightness.dark
@@ -56,4 +56,14 @@ class KuangshuatiApp extends ConsumerWidget {
       builder: applyTextScale,
     );
   }
+}
+
+/// 把「App 内题目字号」与「系统字号」合并成一个最终的文字缩放倍数。
+///
+/// 不能相乘：系统字号 1.3 × 设置里选“小”0.9 = 1.17，用户明明选了“小”，
+/// 字却比标准还大，设置项形同虚设。改成取较大值——用户选“小”就真能变小
+/// （尊重 App 内选择），用户选“大”也不会被系统的小字号拖回去（尊重系统设置）。
+double effectiveTextScale(double appScale, double systemScale) {
+  final larger = appScale > systemScale ? appScale : systemScale;
+  return larger.clamp(0.85, 1.6);
 }
