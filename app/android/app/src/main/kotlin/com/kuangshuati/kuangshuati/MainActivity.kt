@@ -16,6 +16,7 @@ import java.io.File
 class MainActivity : FlutterActivity() {
     private val channelName = "com.kuangshuati.app/updates"
     private val backupChannelName = "com.kuangshuati.app/backup"
+    private val screenChannelName = "com.kuangshuati.app/screen"
 
     private val pickBackupRequestCode = 0x5B01
     private val saveBackupRequestCode = 0x5B02
@@ -181,6 +182,32 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         registerBackupChannel(flutterEngine)
+        // 做题时屏幕不能息屏：用户读一段长材料（上海卷单题材料常在 300 字
+        // 以上）就会超过系统息屏时间（默认 30 秒），屏幕黑掉、需要重新
+        // 解锁，作答节奏被直接打断。练习页进入时开、离开时关。
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            screenChannelName,
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "setKeepScreenOn" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    runOnUiThread {
+                        if (enabled) {
+                            window.addFlags(
+                                android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+                            )
+                        } else {
+                            window.clearFlags(
+                                android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+                            )
+                        }
+                    }
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             channelName,
