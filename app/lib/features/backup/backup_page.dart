@@ -169,6 +169,9 @@ class _BackupPageState extends ConsumerState<BackupPage> {
 
   Future<void> _exportToFile() => _runBusy(() async {
     final file = await _service.export();
+    // 直接读字节交给原生写出去（用户选保存位置只能走字节）。
+    // 这里保留 readAsBytes，因为 SAF 的 CREATE_DOCUMENT 只能接收
+    // ByteArray；备份文件量级（几百 KB～几 MB）远不到 OOM 风险。
     final bytes = await file.readAsBytes();
     final saved = await BackupPlatform.saveToFile(
       suggestedName: file.uri.pathSegments.last,
@@ -185,10 +188,15 @@ class _BackupPageState extends ConsumerState<BackupPage> {
   });
 
   Future<void> _shareBackup() => _runBusy(() async {
-    final file = await _service.export();
     final tempDirectory = await getTemporaryDirectory();
-    final copy = File('${tempDirectory.path}/${file.uri.pathSegments.last}');
-    await copy.writeAsBytes(await file.readAsBytes(), flush: true);
+    // 先清掉上一次分享留下的副本（详见 pruneShareTempFiles 注释）。
+    await pruneShareTempFiles(tempDirectory);
+    final file = await _service.export();
+    final copy = File(
+      '${tempDirectory.path}/$shareTempPrefix${file.uri.pathSegments.last}',
+    );
+    // 用流式复制：文件大时不会把整个数据库读进内存。
+    await file.openRead().pipe(copy.openWrite());
     final shared = await BackupPlatform.share(copy);
     if (!mounted) return;
     if (shared) {

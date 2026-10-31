@@ -72,3 +72,34 @@ class PickedBackupFile {
   final String name;
   final Uint8List bytes;
 }
+
+/// 分享备份时写到临时目录的文件名前缀。
+///
+/// 系统分享是异步的：`startActivity` 只把 FileProvider 的 URI 交给目标
+/// 应用（微信/邮箱），对方在用户点「发送」时才真正去读这个文件。所以
+/// 分享返回后不能立刻删。但也不能不删：早先每次分享都在临时目录留一份
+/// 完整数据库副本，分享 N 次就留 N 份，长期白占存储空间。
+/// 采取「下次分享前先清上一次」的做法，既不弄丢正在分享的文件，也不会
+/// 无限堆积。
+const String shareTempPrefix = 'kst-share-';
+
+/// 清掉上一次分享留在临时目录里的副本。清理失败不抛异常。
+Future<int> pruneShareTempFiles(Directory tempDirectory) async {
+  var removed = 0;
+  try {
+    await for (final entity in tempDirectory.list()) {
+      final name = entity.uri.pathSegments.last;
+      if (entity is File && name.startsWith(shareTempPrefix)) {
+        try {
+          await entity.delete();
+          removed++;
+        } catch (_) {
+          // 单个文件删不掉不影响其它文件。
+        }
+      }
+    }
+  } catch (_) {
+    // 目录不存在或不可读：没有任何东西要清理。
+  }
+  return removed;
+}
