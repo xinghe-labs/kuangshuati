@@ -44,6 +44,21 @@ final latestActiveSessionProvider = StreamProvider<PracticeSession?>((ref) {
   return ref.watch(databaseProvider).watchLatestActiveSession();
 });
 
+/// 进行中练习里“已提交多少题”。
+///
+/// 首页原先只显示 `上次练到第 N / M 题`（N 是当前停留位置）。用户只答了
+/// 1 题、用答题卡翻到最后一题，首页就显示「第 5 / 5 题」，看起来像练完了。
+/// 补上真实已答数量，用户才知道还剩多少。
+final activeSessionAnsweredProvider = FutureProvider.family<int, String>((
+  ref,
+  sessionId,
+) async {
+  final answers = await ref
+      .watch(databaseProvider)
+      .answersForSession(sessionId);
+  return answers.where((answer) => answer.submitted).length;
+});
+
 final reviewItemsProvider = StreamProvider<List<ReviewItem>>((ref) {
   return ref.watch(databaseProvider).watchReviewItems();
 });
