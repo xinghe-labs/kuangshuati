@@ -222,7 +222,7 @@ class _ResultPageState extends ConsumerState<ResultPage> {
                 padding: const EdgeInsets.all(12),
                 color: AppColors.softFill,
                 child: Text(
-                  '本有 $uncertainCount 道题被标记不确定，'
+                  '本次有 $uncertainCount 道题被标记不确定，'
                   '已加入明天的复习计划。',
                   style: TextStyle(color: AppColors.muted, fontSize: 12),
                 ),
