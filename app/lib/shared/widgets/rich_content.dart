@@ -86,7 +86,7 @@ class _RichContentState extends ConsumerState<RichContent> {
     final markup = widget.markup;
     final baseStyle =
         widget.style ??
-        const TextStyle(color: AppColors.ink, fontSize: 15, height: 1.65);
+        TextStyle(color: AppColors.ink, fontSize: 15, height: 1.65);
     final segments = _parseSegments(markup);
     final heights = _heights;
     // 行内判定：阈值内，或夹在句中（前后同一行都有文字）且高度不超句中上限。
@@ -354,7 +354,7 @@ class _BlockAssetImageState extends ConsumerState<_BlockAssetImage> {
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             color: AppColors.softFill,
-            child: const Text(
+            child: Text(
               '图片缺失',
               style: TextStyle(color: AppColors.muted, fontSize: 12),
             ),
@@ -368,7 +368,7 @@ class _BlockAssetImageState extends ConsumerState<_BlockAssetImage> {
             fit: BoxFit.contain,
             alignment: Alignment.centerLeft,
             gaplessPlayback: true,
-            errorBuilder: (context, error, stackTrace) => const Text(
+            errorBuilder: (context, error, stackTrace) => Text(
               '图片无法显示',
               style: TextStyle(color: AppColors.muted, fontSize: 12),
             ),

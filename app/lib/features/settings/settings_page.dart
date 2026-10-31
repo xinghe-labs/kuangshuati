@@ -167,13 +167,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               subtitle: '行测真题离线刷题',
               trailing: Text(
                 _versionLabel.isEmpty ? '' : '版本 $_versionLabel',
-                style: const TextStyle(color: AppColors.muted, fontSize: 12),
+                style: TextStyle(color: AppColors.muted, fontSize: 12),
               ),
             ),
           ],
         ),
         const SizedBox(height: 8),
-        const Padding(
+        Padding(
           padding: EdgeInsets.symmetric(horizontal: 4),
           child: Center(
             child: Text(
@@ -289,7 +289,7 @@ class _UpdatePill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       color: AppColors.positiveFill,
-      child: const Text(
+      child: Text(
         '有更新',
         style: TextStyle(
           color: AppColors.positive,

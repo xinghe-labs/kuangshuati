@@ -65,6 +65,9 @@ class _ResultPageState extends ConsumerState<ResultPage> {
     final correct = details
         .where((item) => item.answer?.isCorrect == true)
         .length;
+    // 题库换版后旧题可能已不存在：总题数按会话记录算，
+    // 失效题不计入正确率分母，但必须明确告诉用户。
+    final missingCount = _rows.length - details.length;
     // 开发文档 §11.1 / §11.2：练习看“正确率”（分母只算已作答题），
     // 模考看“得分率”（分母是整卷题数，未答按零分）。
     final isMock = session.mode == domain.PracticeMode.mock.name;
@@ -73,6 +76,9 @@ class _ResultPageState extends ConsumerState<ResultPage> {
     final visible = _wrongOnly
         ? details.where((item) => item.answer?.isCorrect != true).toList()
         : details;
+    final uncertainCount = details
+        .where((item) => item.answer?.uncertain == true)
+        .length;
 
     return Scaffold(
       appBar: AppBar(
@@ -108,8 +114,8 @@ class _ResultPageState extends ConsumerState<ResultPage> {
                   children: [
                     Text(
                       '${(score * 100).round()}',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: AppColors.onInk,
                         fontSize: 52,
                         height: 0.95,
                         fontWeight: FontWeight.w800,
@@ -117,8 +123,8 @@ class _ResultPageState extends ConsumerState<ResultPage> {
                     ),
                     Text(
                       isMock ? '% 得分率' : '% 正确率',
-                      style: const TextStyle(
-                        color: Color(0xFFD1D1CA),
+                      style: TextStyle(
+                        color: AppColors.onInkMuted,
                         fontSize: 12,
                       ),
                     ),
@@ -130,7 +136,7 @@ class _ResultPageState extends ConsumerState<ResultPage> {
                     Expanded(
                       child: _ResultMetric(
                         label: '总题数',
-                        value: '${details.length}',
+                        value: '${_rows.length}',
                       ),
                     ),
                     Expanded(
@@ -174,6 +180,35 @@ class _ResultPageState extends ConsumerState<ResultPage> {
               ),
             ],
           ),
+          if (uncertainCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                color: AppColors.softFill,
+                child: Text(
+                  '本有 $uncertainCount 道题被标记不确定，'
+                  '已加入明天的复习计划。',
+                  style: TextStyle(color: AppColors.muted, fontSize: 12),
+                ),
+              ),
+            ),
+          if (missingCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                color: AppColors.softFill,
+                child: Text(
+                  '有 $missingCount 道题已随题库更新失效，无法展示，'
+                  '也不计入正确率。',
+                  style: TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
           if (visible.isEmpty)
             const AppEmptyState(title: '没有错题', message: '这次练习全部答对。')
           else
@@ -254,13 +289,16 @@ class _ResultMetric extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(color: Color(0xFFBDBDB7), fontSize: 10),
+          style: TextStyle(
+            color: AppColors.onInkMuted,
+            fontSize: 10,
+          ),
         ),
         const SizedBox(height: 5),
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: AppColors.onInk,
             fontSize: 21,
             fontWeight: FontWeight.w700,
           ),

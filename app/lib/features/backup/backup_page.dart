@@ -94,7 +94,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
             ],
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             '「导出到文件」保存到你选择的位置，例如下载目录或网盘；「分享备份」可直接发给自己或存到微信文件传输助手。',
             style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5),
           ),
@@ -132,7 +132,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
             ],
           ),
           const SizedBox(height: 10),
-          const Text(
+          Text(
             '恢复会覆盖当前的练习记录、错题本、收藏和统计。执行前会自动把当前数据另存一份本机备份，题库内容不受影响。',
             style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5),
           ),
@@ -261,7 +261,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                 ),
             if (counts.isEmpty) const Text('这份备份里没有练习记录，恢复后当前进度会被清空。'),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               '当前数据会先自动另存一份本机备份，再被这份备份覆盖。',
               style: TextStyle(color: AppColors.muted, fontSize: 12),
             ),
@@ -324,7 +324,7 @@ class _CountsCard extends StatelessWidget {
       color: AppColors.surface,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: current == null
-          ? const Text('正在读取本机数据…', style: TextStyle(color: AppColors.muted))
+          ? Text('正在读取本机数据…', style: TextStyle(color: AppColors.muted))
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -382,7 +382,7 @@ class _LocalBackupTile extends StatelessWidget {
       color: AppColors.surface,
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-        leading: const Icon(Icons.inventory_2_outlined, color: AppColors.muted),
+        leading: Icon(Icons.inventory_2_outlined, color: AppColors.muted),
         title: Text(
           name,
           maxLines: 1,
@@ -453,7 +453,7 @@ class _EmptyCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       child: Text(
         message,
-        style: const TextStyle(
+        style: TextStyle(
           color: AppColors.muted,
           fontSize: 12.5,
           height: 1.5,

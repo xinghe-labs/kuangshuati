@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -89,6 +90,10 @@ class _PracticePageState extends ConsumerState<PracticePage>
     final showResult =
         session.revealMode == domain.RevealMode.immediate.value &&
         answer?.submitted == true;
+    // 多选题从正确答案个数推导：正确答案多于一项即为多选，
+    // 界面显示“多选”并允许勾选多个选项。
+    final isMultiSelect = question.correctAnswers.length > 1;
+    final deadline = session.deadlineAt;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -134,36 +139,87 @@ class _PracticePageState extends ConsumerState<PracticePage>
             ),
           ),
         ),
-        body: ListView(
-          controller: _scrollController,
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 30),
-          children: [
-            Row(
+        body: CallbackShortcuts(
+          bindings: {
+            // 桌面端/Web 键盘作答：数字选选项，回车提交/下一题，方向键翻题。
+            for (var i = 0; i < question.options.length && i < 4; i++)
+              SingleActivator([
+                LogicalKeyboardKey.digit1,
+                LogicalKeyboardKey.digit2,
+                LogicalKeyboardKey.digit3,
+                LogicalKeyboardKey.digit4,
+              ][i]): () => _selectOption(question.options.keys.elementAt(i)),
+            const SingleActivator(LogicalKeyboardKey.enter):
+                () => _handlePrimary(session, question, answer),
+            const SingleActivator(LogicalKeyboardKey.numpadEnter):
+                () => _handlePrimary(session, question, answer),
+            const SingleActivator(LogicalKeyboardKey.arrowLeft):
+                () => _goTo(_index - 1),
+            const SingleActivator(LogicalKeyboardKey.arrowRight):
+                () => _goTo(_index + 1),
+          },
+          child: Focus(
+            autofocus: true,
+            child: ListView(
+              controller: _scrollController,
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 30),
               children: [
-                Text(
-                  '第 ${_index + 1} / ${_rows.length} 题',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(width: 8),
-                AppTag(label: question.module),
-                const Spacer(),
-                if (ref.watch(showTimerProvider).value ?? true)
-                  Text(
-                    _formatDuration(_elapsedSessionMs),
-                    style: const TextStyle(
-                      color: AppColors.ink,
-                      fontSize: 12,
-                      fontFeatures: [FontFeature.tabularFigures()],
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        '第 ${_index + 1} / ${_rows.length} 题',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ),
-                  ),
-              ],
-            ),
+                    const SizedBox(width: 8),
+                    Flexible(child: AppTag(label: question.module)),
+                    if (isMultiSelect) ...[
+                      const SizedBox(width: 6),
+                      const AppTag(label: '多选'),
+                    ],
+                    const Spacer(),
+                    // 模考剩余时间：到点自动交卷，用户需要能看到还剩多久。
+                    if (deadline != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Text(
+                          '剩余 ${_formatRemaining(deadline)}',
+                          style: TextStyle(
+                            color: _remainingMs(deadline) < 5 * 60 * 1000
+                                ? AppColors.negative
+                                : AppColors.ink,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: const [
+                              FontFeature.tabularFigures(),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (ref.watch(showTimerProvider).value ?? true)
+                      Flexible(
+                        child: Text(
+                          _formatDuration(_elapsedSessionMs),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: AppColors.ink,
+                            fontSize: 12,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
             const SizedBox(height: 14),
             if (question.material != null)
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
                 padding: const EdgeInsets.all(14),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: AppColors.softFill,
                   border: Border(
                     left: BorderSide(color: AppColors.ink, width: 3),
@@ -176,7 +232,7 @@ class _PracticePageState extends ConsumerState<PracticePage>
               ),
             RichContent(
               question.stem,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.ink,
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
@@ -198,7 +254,12 @@ class _PracticePageState extends ConsumerState<PracticePage>
                 ),
               ),
             const SizedBox(height: 8),
-            Row(
+            // 小屏大字号下四个操作放不下一行时自动换行，避免 RenderFlex 溢出。
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 4,
+              runSpacing: 0,
               children: [
                 TextButton.icon(
                   onPressed: () => _toggleUncertain(question.id),
@@ -212,7 +273,15 @@ class _PracticePageState extends ConsumerState<PracticePage>
                     _uncertain.contains(question.id) ? '已标记不确定' : '标记不确定',
                   ),
                 ),
-                const Spacer(),
+                // 跳过：不会做的题可以先翻过去，不强迫硬选一个；
+                // 跳过的题保持未作答，不算错。
+                TextButton.icon(
+                  onPressed: _index < _rows.length - 1
+                      ? () => _goTo(_index + 1)
+                      : null,
+                  icon: const Icon(Icons.skip_next, size: 18),
+                  label: const Text('跳过'),
+                ),
                 IconButton(
                   tooltip: _favorite ? '取消收藏' : '收藏本题',
                   onPressed: _toggleFavorite,
@@ -236,7 +305,9 @@ class _PracticePageState extends ConsumerState<PracticePage>
                 solution: question.solution,
               ),
             ],
-          ],
+              ],
+            ),
+          ),
         ),
         bottomNavigationBar: _BottomBar(
           canGoPrevious: _index > 0,
@@ -308,6 +379,35 @@ class _PracticePageState extends ConsumerState<PracticePage>
         _favorite = favorite;
         _loading = false;
       });
+      // 已经超时的会话重开：先问用户，不再静默自动交卷。
+      if (_deadlinePassed) {
+        if (!mounted) return;
+        final finishNow = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('本次练习已超过时限'),
+            content: const Text('时间已到，无法继续作答。可以现在交卷查看结果。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('返回'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('立即交卷'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted) return;
+        if (finishNow == true) {
+          await _finalize(automatic: true);
+        } else {
+          context.pop();
+        }
+        return;
+      }
       _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
         if (!mounted) return;
         if (_deadlinePassed) {
@@ -316,7 +416,6 @@ class _PracticePageState extends ConsumerState<PracticePage>
           setState(() {});
         }
       });
-      if (_deadlinePassed) _finalize(automatic: true);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -341,8 +440,18 @@ class _PracticePageState extends ConsumerState<PracticePage>
         existing?.submitted == true) {
       return;
     }
+    // 多选题（正确答案多于一项）按勾选/取消切换；单选题维持点选即替换。
+    final isMultiSelect = question.correctAnswers.length > 1;
+    final current = Set<String>.of(_selected[question.id] ?? const <String>{});
+    if (isMultiSelect) {
+      if (!current.add(letter)) current.remove(letter);
+    } else {
+      current
+        ..clear()
+        ..add(letter);
+    }
     setState(() {
-      _selected[question.id] = {letter};
+      _selected[question.id] = current;
     });
     await _saveCurrent(submitted: false, isCorrect: null);
   }
@@ -489,7 +598,9 @@ class _PracticePageState extends ConsumerState<PracticePage>
       builder: (context) => AlertDialog(
         title: const Text('确认交卷'),
         content: Text(
-          unanswered == 0 ? '交卷后将生成本次练习结果。' : '还有 $unanswered 道题未作答，未答题按零分计。',
+          unanswered == 0
+              ? '交卷后将生成本次练习结果。'
+              : '还有 $unanswered 道题未作答。未作的题计 0 分，不会记入错题本。',
         ),
         actions: [
           TextButton(
@@ -588,10 +699,11 @@ class _PracticePageState extends ConsumerState<PracticePage>
     if (note == null) return;
     await database.setFavoriteNote(question.id, note);
     if (!mounted) return;
-    setState(() => _favorite = true);
+    // 写笔记不再强制收藏：笔记和收藏是两回事，
+    // 题目页的收藏图标状态保持用户自己的选择。
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('笔记已保存')));
+    ).showSnackBar(const SnackBar(content: Text('笔记已保存，可在题库页「笔记」里查看')));
   }
 
   Future<void> _showAnswerSheet() async {
@@ -645,9 +757,9 @@ class _PracticePageState extends ConsumerState<PracticePage>
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      const _LegendDot(label: '已答', color: AppColors.ink),
+                      _LegendDot(label: '已答', color: AppColors.ink),
                       const SizedBox(width: 13),
-                      const _LegendDot(label: '不确定', color: AppColors.warning),
+                      _LegendDot(label: '不确定', color: AppColors.warning),
                       const Spacer(),
                       FilledButton(
                         onPressed: () {
@@ -673,6 +785,20 @@ class _PracticePageState extends ConsumerState<PracticePage>
     final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
     final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
+  }
+
+  int _remainingMs(int deadlineMs) {
+    final remaining = deadlineMs - DateTime.now().millisecondsSinceEpoch;
+    return remaining < 0 ? 0 : remaining;
+  }
+
+  /// 模考剩余时间：超过一小时按 h:mm:ss，否则 mm:ss。
+  String _formatRemaining(int deadlineMs) {
+    final totalSeconds = _remainingMs(deadlineMs) ~/ 1000;
+    final hours = totalSeconds ~/ 3600;
+    final minutes = ((totalSeconds % 3600) ~/ 60).toString().padLeft(2, '0');
+    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+    return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
   }
 }
 
@@ -758,7 +884,7 @@ class _OptionTile extends StatelessWidget {
                     letter,
                     style: TextStyle(
                       color: selected || isCorrect
-                          ? Colors.white
+                          ? AppColors.onInk
                           : AppColors.ink,
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
@@ -769,7 +895,7 @@ class _OptionTile extends StatelessWidget {
                 Expanded(
                   child: RichContent(
                     text,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppColors.ink,
                       fontSize: 15,
                       height: 1.55,
@@ -777,13 +903,13 @@ class _OptionTile extends StatelessWidget {
                   ),
                 ),
                 if (isCorrect)
-                  const Icon(
+                  Icon(
                     Icons.check_circle,
                     color: AppColors.positive,
                     size: 19,
                   ),
                 if (isWrongSelection)
-                  const Icon(Icons.cancel, color: AppColors.negative, size: 19),
+                  Icon(Icons.cancel, color: AppColors.negative, size: 19),
               ],
             ),
           ),
@@ -825,7 +951,7 @@ class _BottomBar extends StatelessWidget {
       top: false,
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: AppColors.surface,
           border: Border(top: BorderSide(color: AppColors.line)),
         ),
@@ -921,7 +1047,9 @@ class AppTag extends StatelessWidget {
       color: AppColors.softFill,
       child: Text(
         label,
-        style: const TextStyle(
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
           color: AppColors.muted,
           fontSize: 10,
           fontWeight: FontWeight.w600,
@@ -978,7 +1106,7 @@ class _AnswerCardCell extends StatelessWidget {
         child: Center(
           child: Text(
             '${index + 1}',
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.ink,
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -1004,7 +1132,7 @@ class _LegendDot extends StatelessWidget {
         const SizedBox(width: 5),
         Text(
           label,
-          style: const TextStyle(color: AppColors.muted, fontSize: 10),
+          style: TextStyle(color: AppColors.muted, fontSize: 10),
         ),
       ],
     );

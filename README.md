@@ -65,14 +65,17 @@ flutter run
 
 启动时会把 `assets/content/parts/` 中的 19 个分片依次写入应用支持目录，再以只读 SQLite 打开。分片方式避免一次性把约 298 MiB 数据库读入内存。题库更新会替换内容库，用户记录保存在独立的 `kuangshuati_user` 数据库中。
 
+Windows 本机跑 `flutter test` 偶发失败、报 `sqlite3.dll` 拒绝访问：这是 native-assets 缓存（`app/.dart_tool/hooks_runner/`、`app/build/native_assets/`）里的 DLL 被残留测试进程占用，属构建缓存问题而非代码问题；关闭残留 `dart.exe`/`flutter_tester.exe` 后重试，或在隔离副本中跑测试即可。
+
 当前已验证：
 
 - `flutter analyze` 无问题。
-- 46 个本地单元测试全部通过（组件、数据库、真实资产、备份/恢复、更新下载校验）。
+- 50 个本地单元测试全部通过（组件、数据库、真实资产、备份/恢复、更新下载校验，以及多选题判分、空白题不入错题本、收藏/笔记分离、深色色表切换等回归用例）。
 - 真机 真机集成测试通过，实际加载 58,890 道题、515 份试卷。
 - 正式 release APK 已在 真机 冷启动通过，3.2 秒完成首屏并加载全量题库。
 - 题图从 SQLite BLOB 读取并完成 Flutter 图片解码测试。
 - Release APK 约 197 MiB，APK v2 签名与 4 字节对齐验证通过；完整题库分片约 298 MiB。
+- 手机端支持多选题多选判分、跳过本题（含键盘快捷键）、模考剩余时间显示，并跟随系统深色模式自动切换色表。
 - Web 端（`flutter build web -t lib/main_web.dart`，或一键 `python tools/build_web.py`）：浏览器内装入 187 MB 核心题库，六种练习模式全部实测可进入（`artifacts/web-modes-e2e.cjs` 11/11），答题/刷新恢复/错题入册/缓存复用实测通过（`artifacts/web-ui-e2e.cjs` 10/10、`artifacts/web-wrong-e2e.cjs` 7/7、`artifacts/web-e2e.cjs` 5/5）。
 - Web 端备份与恢复：导出触发浏览器真实下载 `.gkbackup`，选回文件后确认弹窗恢复成功（`artifacts/web-backup-e2e.cjs` 8/8）。
 - 跨端备份可互导（已实测，非推断）：`bash artifacts/verify-cross-backup.sh` —— 原生 `dart:io` gzip 产物能被浏览器解开，浏览器 `CompressionStream` 产物能被原生解开，两边均为标准 gzip（magic `1f 8b`）。

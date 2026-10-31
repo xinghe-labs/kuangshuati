@@ -350,10 +350,24 @@ class ContentPackageService {
       return manifest;
     } on ContentPackageException {
       await databaseTemporary.deleteIfExists();
+      await _cleanupSegments(downloadDirectory);
       rethrow;
     } on Exception catch (error) {
       await databaseTemporary.deleteIfExists();
+      await _cleanupSegments(downloadDirectory);
       throw ContentPackageException('安装题库失败：$error');
+    }
+  }
+
+  /// 下载失败后清掉分片缓存：一份没下完的题库包约 140MB，
+  /// 留在临时目录里比“下次断点续传”更伤用户。
+  Future<void> _cleanupSegments(Directory directory) async {
+    try {
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+      }
+    } on Exception {
+      // 清理失败不影响错误上报，残留文件由系统临时目录策略兜底。
     }
   }
 

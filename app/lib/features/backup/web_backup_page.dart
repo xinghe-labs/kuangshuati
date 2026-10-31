@@ -77,7 +77,7 @@ class _WebBackupPageState extends ConsumerState<WebBackupPage> {
             ],
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             '导出会通过浏览器下载一个 .gkbackup 文件（gzip 压缩，只含练习记录，不含题库），'
             '请妥善保存。',
             style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5),
@@ -95,7 +95,7 @@ class _WebBackupPageState extends ConsumerState<WebBackupPage> {
             ],
           ),
           const SizedBox(height: 10),
-          const Text(
+          Text(
             '恢复会覆盖当前的练习记录、错题本、收藏和统计。执行前会先自动下载当前数据的'
             '安全备份，请确认下载完成后再继续；题库内容不受影响。',
             style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5),
@@ -192,7 +192,7 @@ class _WebBackupPageState extends ConsumerState<WebBackupPage> {
                 ),
             if (counts.isEmpty) const Text('这份备份里没有练习记录，恢复后当前进度会被清空。'),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               '当前数据会先自动下载为安全备份，再被这份备份覆盖。',
               style: TextStyle(color: AppColors.muted, fontSize: 12),
             ),
@@ -259,7 +259,7 @@ class _CountsCard extends StatelessWidget {
       color: AppColors.surface,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: current == null
-          ? const Text('正在读取当前数据…', style: TextStyle(color: AppColors.muted))
+          ? Text('正在读取当前数据…', style: TextStyle(color: AppColors.muted))
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

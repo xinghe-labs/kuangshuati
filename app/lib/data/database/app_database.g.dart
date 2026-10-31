@@ -2443,8 +2443,28 @@ class $FavoritesTable extends Favorites
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _favoritedMeta = const VerificationMeta(
+    'favorited',
+  );
   @override
-  List<GeneratedColumn> get $columns => [questionId, createdAt, note];
+  late final GeneratedColumn<bool> favorited = GeneratedColumn<bool>(
+    'favorited',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("favorited" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    questionId,
+    createdAt,
+    note,
+    favorited,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -2479,6 +2499,12 @@ class $FavoritesTable extends Favorites
         note.isAcceptableOrUnknown(data['note']!, _noteMeta),
       );
     }
+    if (data.containsKey('favorited')) {
+      context.handle(
+        _favoritedMeta,
+        favorited.isAcceptableOrUnknown(data['favorited']!, _favoritedMeta),
+      );
+    }
     return context;
   }
 
@@ -2500,6 +2526,10 @@ class $FavoritesTable extends Favorites
         DriftSqlType.string,
         data['${effectivePrefix}note'],
       )!,
+      favorited: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}favorited'],
+      )!,
     );
   }
 
@@ -2513,10 +2543,16 @@ class Favorite extends DataClass implements Insertable<Favorite> {
   final String questionId;
   final int createdAt;
   final String note;
+
+  /// 收藏与笔记分离：只写笔记不强制收藏。
+  /// favorited=false 的行是“纯笔记”，不出现在收藏列表里；
+  /// 取消收藏只翻转这个标记，不删行，笔记得以保留。
+  final bool favorited;
   const Favorite({
     required this.questionId,
     required this.createdAt,
     required this.note,
+    required this.favorited,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2524,6 +2560,7 @@ class Favorite extends DataClass implements Insertable<Favorite> {
     map['question_id'] = Variable<String>(questionId);
     map['created_at'] = Variable<int>(createdAt);
     map['note'] = Variable<String>(note);
+    map['favorited'] = Variable<bool>(favorited);
     return map;
   }
 
@@ -2532,6 +2569,7 @@ class Favorite extends DataClass implements Insertable<Favorite> {
       questionId: Value(questionId),
       createdAt: Value(createdAt),
       note: Value(note),
+      favorited: Value(favorited),
     );
   }
 
@@ -2544,6 +2582,7 @@ class Favorite extends DataClass implements Insertable<Favorite> {
       questionId: serializer.fromJson<String>(json['questionId']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       note: serializer.fromJson<String>(json['note']),
+      favorited: serializer.fromJson<bool>(json['favorited']),
     );
   }
   @override
@@ -2553,15 +2592,21 @@ class Favorite extends DataClass implements Insertable<Favorite> {
       'questionId': serializer.toJson<String>(questionId),
       'createdAt': serializer.toJson<int>(createdAt),
       'note': serializer.toJson<String>(note),
+      'favorited': serializer.toJson<bool>(favorited),
     };
   }
 
-  Favorite copyWith({String? questionId, int? createdAt, String? note}) =>
-      Favorite(
-        questionId: questionId ?? this.questionId,
-        createdAt: createdAt ?? this.createdAt,
-        note: note ?? this.note,
-      );
+  Favorite copyWith({
+    String? questionId,
+    int? createdAt,
+    String? note,
+    bool? favorited,
+  }) => Favorite(
+    questionId: questionId ?? this.questionId,
+    createdAt: createdAt ?? this.createdAt,
+    note: note ?? this.note,
+    favorited: favorited ?? this.favorited,
+  );
   Favorite copyWithCompanion(FavoritesCompanion data) {
     return Favorite(
       questionId: data.questionId.present
@@ -2569,6 +2614,7 @@ class Favorite extends DataClass implements Insertable<Favorite> {
           : this.questionId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       note: data.note.present ? data.note.value : this.note,
+      favorited: data.favorited.present ? data.favorited.value : this.favorited,
     );
   }
 
@@ -2577,37 +2623,42 @@ class Favorite extends DataClass implements Insertable<Favorite> {
     return (StringBuffer('Favorite(')
           ..write('questionId: $questionId, ')
           ..write('createdAt: $createdAt, ')
-          ..write('note: $note')
+          ..write('note: $note, ')
+          ..write('favorited: $favorited')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(questionId, createdAt, note);
+  int get hashCode => Object.hash(questionId, createdAt, note, favorited);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is Favorite &&
           other.questionId == this.questionId &&
           other.createdAt == this.createdAt &&
-          other.note == this.note);
+          other.note == this.note &&
+          other.favorited == this.favorited);
 }
 
 class FavoritesCompanion extends UpdateCompanion<Favorite> {
   final Value<String> questionId;
   final Value<int> createdAt;
   final Value<String> note;
+  final Value<bool> favorited;
   final Value<int> rowid;
   const FavoritesCompanion({
     this.questionId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.note = const Value.absent(),
+    this.favorited = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   FavoritesCompanion.insert({
     required String questionId,
     required int createdAt,
     this.note = const Value.absent(),
+    this.favorited = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : questionId = Value(questionId),
        createdAt = Value(createdAt);
@@ -2615,12 +2666,14 @@ class FavoritesCompanion extends UpdateCompanion<Favorite> {
     Expression<String>? questionId,
     Expression<int>? createdAt,
     Expression<String>? note,
+    Expression<bool>? favorited,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (questionId != null) 'question_id': questionId,
       if (createdAt != null) 'created_at': createdAt,
       if (note != null) 'note': note,
+      if (favorited != null) 'favorited': favorited,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2629,12 +2682,14 @@ class FavoritesCompanion extends UpdateCompanion<Favorite> {
     Value<String>? questionId,
     Value<int>? createdAt,
     Value<String>? note,
+    Value<bool>? favorited,
     Value<int>? rowid,
   }) {
     return FavoritesCompanion(
       questionId: questionId ?? this.questionId,
       createdAt: createdAt ?? this.createdAt,
       note: note ?? this.note,
+      favorited: favorited ?? this.favorited,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2651,6 +2706,9 @@ class FavoritesCompanion extends UpdateCompanion<Favorite> {
     if (note.present) {
       map['note'] = Variable<String>(note.value);
     }
+    if (favorited.present) {
+      map['favorited'] = Variable<bool>(favorited.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2663,6 +2721,7 @@ class FavoritesCompanion extends UpdateCompanion<Favorite> {
           ..write('questionId: $questionId, ')
           ..write('createdAt: $createdAt, ')
           ..write('note: $note, ')
+          ..write('favorited: $favorited, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4894,6 +4953,7 @@ typedef $$FavoritesTableCreateCompanionBuilder =
       required String questionId,
       required int createdAt,
       Value<String> note,
+      Value<bool> favorited,
       Value<int> rowid,
     });
 typedef $$FavoritesTableUpdateCompanionBuilder =
@@ -4901,6 +4961,7 @@ typedef $$FavoritesTableUpdateCompanionBuilder =
       Value<String> questionId,
       Value<int> createdAt,
       Value<String> note,
+      Value<bool> favorited,
       Value<int> rowid,
     });
 
@@ -4925,6 +4986,11 @@ class $$FavoritesTableFilterComposer
 
   ColumnFilters<String> get note => $composableBuilder(
     column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get favorited => $composableBuilder(
+    column: $table.favorited,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -4952,6 +5018,11 @@ class $$FavoritesTableOrderingComposer
     column: $table.note,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get favorited => $composableBuilder(
+    column: $table.favorited,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$FavoritesTableAnnotationComposer
@@ -4973,6 +5044,9 @@ class $$FavoritesTableAnnotationComposer
 
   GeneratedColumn<String> get note =>
       $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<bool> get favorited =>
+      $composableBuilder(column: $table.favorited, builder: (column) => column);
 }
 
 class $$FavoritesTableTableManager
@@ -5006,11 +5080,13 @@ class $$FavoritesTableTableManager
                 Value<String> questionId = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
                 Value<String> note = const Value.absent(),
+                Value<bool> favorited = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FavoritesCompanion(
                 questionId: questionId,
                 createdAt: createdAt,
                 note: note,
+                favorited: favorited,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -5018,11 +5094,13 @@ class $$FavoritesTableTableManager
                 required String questionId,
                 required int createdAt,
                 Value<String> note = const Value.absent(),
+                Value<bool> favorited = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FavoritesCompanion.insert(
                 questionId: questionId,
                 createdAt: createdAt,
                 note: note,
+                favorited: favorited,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
