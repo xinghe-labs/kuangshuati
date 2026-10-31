@@ -98,6 +98,12 @@ class FullContentRepository implements ContentRepository {
       _inner.sequenceQuestions(limit: limit);
 
   @override
+  Future<List<QuestionContent>> searchQuestions(
+    String query, {
+    int limit = 200,
+  }) => _inner.searchQuestions(query, limit: limit);
+
+  @override
   Future<Uint8List?> imageBytes(String assetId) => _inner.imageBytes(assetId);
 
   @override

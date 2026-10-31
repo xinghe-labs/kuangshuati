@@ -131,6 +131,32 @@ class SqlContentRepository implements ContentRepository {
   }
 
   @override
+  Future<List<QuestionContent>> searchQuestions(
+    String query, {
+    int limit = 200,
+  }) async {
+    final normalized = query.trim();
+    if (normalized.isEmpty) return const <QuestionContent>[];
+    // 题干、材料、选项都搜：用户往往只记得选项里的一个词（如“基层治理”），
+    // 不一定记得题干怎么写的。
+    // 用 instr 而不是 LIKE '%...%'：用户输入的 % 和 _ 在 LIKE 里是通配符，
+    // 搜“20%”这种题干会变成模糊匹配、结果全乱。
+    final rows = await _executor.select(
+      '''
+      SELECT *
+      FROM questions
+      WHERE instr(stem_text, ?) > 0
+         OR instr(COALESCE(material_markup, ''), ?) > 0
+         OR instr(options_json, ?) > 0
+      ORDER BY year DESC, paper_id ASC, sequence ASC
+      LIMIT ?
+      ''',
+      [normalized, normalized, normalized, limit],
+    );
+    return rows.map(_questionFromRow).toList(growable: false);
+  }
+
+  @override
   Future<List<QuestionContent>> randomQuestions(
     int count, {
     String? module,
