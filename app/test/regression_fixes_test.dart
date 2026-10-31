@@ -2,14 +2,17 @@ import 'dart:convert';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kuangshuati/core/providers.dart';
 import 'package:kuangshuati/core/theme/app_theme.dart';
+import 'package:kuangshuati/data/content/content_repository.dart';
 import 'package:kuangshuati/data/content/seed_content_repository.dart';
 import 'package:kuangshuati/data/database/app_database.dart';
 import 'package:kuangshuati/app.dart' show effectiveTextScale;
 import 'package:kuangshuati/domain/models.dart';
 import 'package:kuangshuati/features/practice/practice_page.dart'
-    show optionTextRepeatsLetter;
+    show optionTextRepeatsLetter, PracticePage;
 
 void main() {
   late AppDatabase database;
@@ -198,4 +201,133 @@ void main() {
     expect(effectiveTextScale(3.0, 3.0), 1.6);
     expect(effectiveTextScale(0.1, 0.1), 0.85);
   });
+
+  testWidgets('切到后台的时间不计入做题用时', (tester) async {
+    // 之前 didChangeAppLifecycleState 只调 _saveProgress()，不冻结
+    // _runStartedAt / _questionStartedAt。用户回微信 10 分钟，这 10 分钟
+    // 全部算进本组用时和当前题用时，再经 finalizeSession 累加进
+    // dailyStats / moduleStats，统计页“模块表现”的分钟数整片虚高。
+    final stubQuestions = [
+      for (final question in questions.take(2)) question,
+    ];
+    await tester.runAsync(() async {
+      await database.createSession(
+        id: 's-bg',
+        mode: PracticeMode.custom,
+        title: '后台计时',
+        questions: stubQuestions,
+        revealMode: RevealMode.immediate,
+      );
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: _PracticeHarness(
+          database: database,
+          questions: stubQuestions,
+          sessionId: 's-bg',
+        ),
+      ),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 250)),
+    );
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 250)),
+    );
+    await tester.pump();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    // 后台待 1500ms
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 1500)),
+    );
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    await tester.tap(find.text('提交答案'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 250)),
+    );
+    await tester.pump();
+
+    final answers = await database.answersForSession('s-bg');
+    final total = answers.fold<int>(0, (sum, a) => sum + a.durationMs);
+    // 后台停了 1500ms。修复后这段时间应完全不计；未修复时它会被
+    // 完整算进去（实测 total≈3000ms）。这里用 1300ms 作阈值，既低于
+    // 后台时长，又留足余量吸收并行跑测试时的调度抖动。
+    expect(
+      total,
+      lessThan(1300),
+      reason: '后台 1.5 秒被算进了做题用时（total=$total）',
+    );
+
+    // 收尾：让页面真正 dispose（会取消 1s 定时器），再把残留的
+    // 零延迟定时器跑完，否则 flutter_test 会报 “Timer is still pending”。
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 3));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump(const Duration(seconds: 3));
+  });
+}
+
+/// 把 PracticePage 包进 ProviderScope，并注入测试题库。
+class _PracticeHarness extends StatelessWidget {
+  const _PracticeHarness({
+    required this.database,
+    required this.questions,
+    required this.sessionId,
+  });
+
+  final AppDatabase database;
+  final List<QuestionContent> questions;
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context) {
+    return ProviderScope(
+      overrides: [
+        databaseProvider.overrideWithValue(database),
+        contentRepositoryProvider.overrideWithValue(
+          _HarnessContentRepository(questions),
+        ),
+      ],
+      child: MaterialApp(
+        theme: buildAppTheme(),
+        home: PracticePage(sessionId: sessionId),
+      ),
+    );
+  }
+}
+
+class _HarnessContentRepository extends SeedContentRepository {
+  _HarnessContentRepository(this.questions);
+
+  final List<QuestionContent> questions;
+
+  @override
+  List<QuestionContent> questionsByIds(Iterable<String> ids) {
+    final byId = {for (final question in questions) question.id: question};
+    return [
+      for (final id in ids)
+        if (byId[id] != null) byId[id]!,
+    ];
+  }
+
+  @override
+  Future<ContentImage?> imageWithSize(String assetId) async => null;
+
+  @override
+  Future<Map<String, int>> imageHeights(Iterable<String> assetIds) async =>
+      const {};
 }

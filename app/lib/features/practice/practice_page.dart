@@ -38,6 +38,14 @@ class _PracticePageState extends ConsumerState<PracticePage>
   DateTime _questionStartedAt = DateTime.now();
   int _index = 0;
   int _baseDurationMs = 0;
+  // 切到后台的那一刻。应用回到前台时把这段时长从计时里扣掉：
+  // 用户回微信、接电话的时间不应该算成“做题用时”，否则结果页每题
+  // 用时、统计页模块总时长全都会虚高。
+  DateTime? _pausedAt;
+  // 暂停瞬间的已用时长（本组 / 当前题），回前台时作为新的计时基准。
+  int _frozenSessionMs = 0;
+  int _frozenQuestionMs = 0;
+  String? _frozenQuestionId;
   bool _favorite = false;
   bool _loading = true;
   bool _finishing = false;
@@ -66,8 +74,39 @@ class _PracticePageState extends ConsumerState<PracticePage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      if (_pausedAt == null) {
+        // 冻结计时：把当前已用时长落成基准值，并把锚点推到未来，
+        // 这样后台期间两个 getter 算出的增量恒为 0。不能只记时间点、
+        // 回前台再平移锚点：后台里 _saveCurrent 会把锚点重置到后台
+        // 窗口内，平移后就会超出当前时刻，暂停就失效了。
+        _pausedAt = DateTime.now();
+        _frozenSessionMs = _elapsedSessionMs;
+        _frozenQuestionMs = _currentQuestionDurationMs;
+        _frozenQuestionId = _currentQuestion?.id;
+      }
       _saveProgress();
+      return;
+    }
+    if (state == AppLifecycleState.resumed) {
+      if (_pausedAt == null) return;
+      _pausedAt = null;
+      // 从冻结值重新起算，后台那段时间整个丢掉。
+      final now = DateTime.now();
+      _baseDurationMs = _frozenSessionMs;
+      _runStartedAt = now;
+      final question = _currentQuestion;
+      if (question != null && question.id == _frozenQuestionId) {
+        _questionBaseDurations[question.id] = _frozenQuestionMs;
+        _questionStartedAt = now;
+      } else {
+        _questionStartedAt = now;
+      }
+      _frozenSessionMs = 0;
+      _frozenQuestionMs = 0;
+      _frozenQuestionId = null;
+      if (mounted) setState(() {});
     }
   }
 
@@ -316,12 +355,20 @@ class _PracticePageState extends ConsumerState<PracticePage>
     return _questions[_rows[_index].questionId];
   }
 
-  int get _elapsedSessionMs =>
-      _baseDurationMs + DateTime.now().difference(_runStartedAt).inMilliseconds;
+  // 在后台（_pausedAt != null）时直接返回冻结值：后台期间
+  // didChangeAppLifecycleState 会调 _saveProgress()，它读的就是这两个
+  // getter；如果这里还算实时增量，后台那段时间照样会被写进数据库。
+  int get _elapsedSessionMs => _pausedAt != null
+      ? _frozenSessionMs
+      : _baseDurationMs +
+            DateTime.now().difference(_runStartedAt).inMilliseconds;
 
   int get _currentQuestionDurationMs {
     final question = _currentQuestion;
     if (question == null) return 0;
+    if (_pausedAt != null && question.id == _frozenQuestionId) {
+      return _frozenQuestionMs;
+    }
     final base =
         _questionBaseDurations[question.id] ??
         _answers[question.id]?.durationMs ??
