@@ -42,9 +42,7 @@ class _ContentInstallPageState extends ConsumerState<ContentInstallPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(
-          manager.hasFullContent ? '下载题库更新？' : '下载离线题库？',
-        ),
+        title: Text(manager.hasFullContent ? '下载题库更新？' : '下载离线题库？'),
         content: const Text(
           '安装包约 140MB，建议在 Wi-Fi 环境下下载；'
           '使用移动网络可能产生较多流量费用。'

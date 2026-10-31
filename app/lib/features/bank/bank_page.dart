@@ -243,7 +243,7 @@ class _PaperRow extends StatelessWidget {
                     const SizedBox(height: 5),
                     Text(
                       '${paper.region} · ${paper.paperType} · '
-                          '${paper.durationSeconds ~/ 60} 分钟',
+                      '${paper.durationSeconds ~/ 60} 分钟',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -358,9 +358,7 @@ class _FavoriteList extends ConsumerWidget {
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(
-                                          color: AppColors.positive,
-                                        ),
+                                        ?.copyWith(color: AppColors.positive),
                                   ),
                                 ),
                             ],
@@ -422,8 +420,8 @@ class _NoteList extends ConsumerWidget {
                       query.isEmpty ||
                       question.plainStem.toLowerCase().contains(query) ||
                       (noteById[question.id] ?? '').toLowerCase().contains(
-                            query,
-                          ),
+                        query,
+                      ),
                 )
                 .toList(growable: false);
             if (questions.isEmpty) {

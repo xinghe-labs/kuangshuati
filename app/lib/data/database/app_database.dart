@@ -346,8 +346,9 @@ class AppDatabase extends _$AppDatabase {
 
   /// 笔记列表：所有写过笔记的题（无论是否收藏）。
   Stream<List<Favorite>> watchNoteItems() {
-    return (select(favorites)..where((row) => row.note.equals('').not()))
-        .watch();
+    return (select(
+      favorites,
+    )..where((row) => row.note.equals('').not())).watch();
   }
 
   Stream<List<Favorite>> watchFavorites() => select(favorites).watch();
@@ -377,11 +378,9 @@ class AppDatabase extends _$AppDatabase {
       return true;
     }
     final favorited = !existing.favorited;
-    await (update(
-      favorites,
-    )..where((item) => item.questionId.equals(questionId))).write(
-      FavoritesCompanion(favorited: Value(favorited)),
-    );
+    await (update(favorites)
+          ..where((item) => item.questionId.equals(questionId)))
+        .write(FavoritesCompanion(favorited: Value(favorited)));
     return favorited;
   }
 
@@ -451,18 +450,17 @@ class AppDatabase extends _$AppDatabase {
       // 同一时间只保留一组“进行中”：旧的 active 会话在任何界面上都
       // 回不去了（首页只展示最新一组），留在 active 状态只会制造
       // “继续练习”指向另一组的错觉，这里统一标记为 abandoned。
-      await (update(
-        practiceSessions,
-      )..where(
+      await (update(practiceSessions)..where(
             (row) =>
                 row.status.equals(SessionStatus.active.value) &
                 row.id.equals(id).not(),
-          )).write(
-        PracticeSessionsCompanion(
-          status: Value(SessionStatus.abandoned.value),
-          updatedAt: Value(now),
-        ),
-      );
+          ))
+          .write(
+            PracticeSessionsCompanion(
+              status: Value(SessionStatus.abandoned.value),
+              updatedAt: Value(now),
+            ),
+          );
       await into(practiceSessions).insert(
         PracticeSessionsCompanion.insert(
           id: id,
@@ -511,7 +509,8 @@ class AppDatabase extends _$AppDatabase {
               (row) =>
                   row.sessionId.equals(sessionId) &
                   row.questionId.equals(questionId),
-            )).getSingleOrNull();
+            ))
+            .getSingleOrNull();
     await into(sessionAnswers).insertOnConflictUpdate(
       SessionAnswersCompanion.insert(
         sessionId: sessionId,
@@ -728,10 +727,9 @@ class AppDatabase extends _$AppDatabase {
     if (ids.isEmpty) return 0;
     var deleted = 0;
     for (final id in ids) {
-      deleted +=
-          await (delete(
-            reviewItems,
-          )..where((row) => row.questionId.equals(id))).go();
+      deleted += await (delete(
+        reviewItems,
+      )..where((row) => row.questionId.equals(id))).go();
     }
     return deleted;
   }

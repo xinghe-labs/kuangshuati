@@ -202,10 +202,7 @@ class _ResultPageState extends ConsumerState<ResultPage> {
                 child: Text(
                   '有 $missingCount 道题已随题库更新失效，无法展示，'
                   '也不计入正确率。',
-                  style: TextStyle(
-                    color: AppColors.muted,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: AppColors.muted, fontSize: 12),
                 ),
               ),
             ),
@@ -289,10 +286,7 @@ class _ResultMetric extends StatelessWidget {
       children: [
         Text(
           label,
-          style: TextStyle(
-            color: AppColors.onInkMuted,
-            fontSize: 10,
-          ),
+          style: TextStyle(color: AppColors.onInkMuted, fontSize: 10),
         ),
         const SizedBox(height: 5),
         Text(
