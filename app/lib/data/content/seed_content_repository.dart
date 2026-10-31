@@ -269,8 +269,15 @@ class SeedContentRepository implements ContentRepository {
   }
 
   @override
-  List<QuestionContent> sequenceQuestions({int limit = 100}) {
-    return questions.take(limit).toList(growable: false);
+  List<QuestionContent> sequenceQuestions({
+    int limit = 100,
+    Iterable<String> excludeIds = const [],
+  }) {
+    final excluded = excludeIds.toSet();
+    return questions
+        .where((question) => !excluded.contains(question.id))
+        .take(limit)
+        .toList(growable: false);
   }
 
   @override
