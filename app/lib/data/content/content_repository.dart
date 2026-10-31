@@ -47,7 +47,16 @@ abstract class ContentRepository {
 
   FutureOr<List<QuestionContent>> randomQuestions(int count, {String? module});
 
-  FutureOr<List<QuestionContent>> sequenceQuestions({int limit = 100});
+  /// 顺序练习：按年份/试卷/题号返回题目。
+  ///
+  /// [excludeIds] 用于跳过用户已经做过的题。
+  /// 为什么需要：早先固定返回题库最前面的 100 题，用户每次点“顺序练习”
+  /// 拿到的都是同一批（题库共 58890 题，而顺序练习永远只覆盖前 100 题），
+  /// 练完之后要么重复刷同一批，要么以为题量就这么点。
+  FutureOr<List<QuestionContent>> sequenceQuestions({
+    int limit = 100,
+    Iterable<String> excludeIds = const [],
+  });
 
   /// 按题干/材料/选项文本搜题。
   ///

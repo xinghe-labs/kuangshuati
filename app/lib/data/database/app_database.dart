@@ -239,6 +239,18 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  /// 用户提交过的题目 id（跨所有会话）。
+  ///
+  /// 顺序练习用它跳过已经做过的题：早先固定从题库最前面取 100 题，
+  /// 练完一遍后再点“顺序练习”还是那 100 题。
+  Future<List<String>> answeredQuestionIds() async {
+    final rows = await (selectOnly(sessionAnswers, distinct: true)
+          ..addColumns([sessionAnswers.questionId])
+          ..where(sessionAnswers.submitted.equals(true)))
+        .get();
+    return [for (final row in rows) ?row.read(sessionAnswers.questionId)];
+  }
+
   Future<List<SessionAnswer>> answersForSession(String sessionId) {
     return (select(
       sessionAnswers,

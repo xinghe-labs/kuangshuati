@@ -226,15 +226,25 @@ class SqlContentRepository implements ContentRepository {
   }
 
   @override
-  Future<List<QuestionContent>> sequenceQuestions({int limit = 100}) async {
+  Future<List<QuestionContent>> sequenceQuestions({
+    int limit = 100,
+    Iterable<String> excludeIds = const [],
+  }) async {
+    // 已做过的题来自 App 自己的数据库（答题历史），不在题库文件里，
+    // 所以只能把 id 传进来。用 NOT IN 拼参数，并在上层限制数量。
+    final excluded = excludeIds.toSet().toList(growable: false);
+    final exclusion = excluded.isEmpty
+        ? ''
+        : 'WHERE id NOT IN (${List.filled(excluded.length, '?').join(',')})';
     final rows = await _executor.select(
       '''
       SELECT *
       FROM questions
+      $exclusion
       ORDER BY year ASC, paper_id ASC, sequence ASC, question_no ASC
       LIMIT ?
       ''',
-      [limit],
+      [...excluded, limit],
     );
     return rows.map(_questionFromRow).toList(growable: false);
   }
