@@ -151,8 +151,10 @@ class StatsPage extends ConsumerWidget {
               final day = time.day.toString().padLeft(2, '0');
               return '${time.year}-$month-$day';
             }
+
             final lastSevenDays = {
-              for (var i = 0; i < 7; i++) localDay(now.subtract(Duration(days: i))),
+              for (var i = 0; i < 7; i++)
+                localDay(now.subtract(Duration(days: i))),
             };
             final lastSeven = daily
                 .where((item) => lastSevenDays.contains(item.day))

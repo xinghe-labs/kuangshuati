@@ -106,7 +106,9 @@ void main() {
     expect(find.byType(SelectableText), findsOneWidget);
     expect(_inlineImageSpanCount(tester), 1);
     expect(find.byType(Image), findsOneWidget);
-    expect(find.bySemanticsLabel('查看题图'), findsOneWidget);
+    // 行内公式图不能做成可点按钮：答题页滑动时手指落在公式上会弹出
+    // 全屏查看，把正在作答的用户打断。只有块级题图才可点放大。
+    expect(find.bySemanticsLabel('查看题图'), findsNothing);
   });
 
   testWidgets('sandwiched two-line formula stays inline below context cap', (

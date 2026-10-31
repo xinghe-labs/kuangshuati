@@ -75,6 +75,13 @@ class AppPalette {
 abstract final class AppColors {
   static AppPalette current = AppPalette.light;
 
+  /// 当前是否深色主题。
+  ///
+  /// 题库里的公式图是白底黑字导出的灰度图（实测最亮像素仅 #585858），
+  /// 直接放在深色底上会和背景融在一起，分母基本看不清，
+  /// 所以深色模式下需要给这类图做反色/提亮。
+  static bool get isDark => current == AppPalette.dark;
+
   static Color get paper => current.paper;
   static Color get surface => current.surface;
   static Color get ink => current.ink;
@@ -201,14 +208,19 @@ ThemeData buildAppTheme({bool dark = false}) {
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      height: 68,
+      // 不写死高度：NavigationBar 的标签会跟着系统字号放大，
+      // 固定 68 在 1.3 倍字号下会把“首页”下半个字裁掉。
+      height: null,
       backgroundColor: palette.surface,
       indicatorColor: palette.ink,
       elevation: 0,
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         return TextStyle(
+          // 标签落在指示器药丸之外，底色是 surface，不是 ink。
+          // 选中态用 onInk（墨底上的反白字）会变成深灰字配深灰底，
+          // 在深色模式下几乎看不见；改用 ink 保持对比。
           color: states.contains(WidgetState.selected)
-              ? palette.onInk
+              ? palette.ink
               : palette.muted,
           fontSize: 11,
           fontWeight: FontWeight.w600,
