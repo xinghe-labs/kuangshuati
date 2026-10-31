@@ -55,6 +55,7 @@ class _BankPageState extends ConsumerState<BankPage> {
                   decoration: InputDecoration(
                     hintText: switch (_scope) {
                       _BankScope.papers => '搜索年份、地区或试卷',
+                      _BankScope.questions => '搜索题干、材料或选项文字',
                       _BankScope.favorites => '搜索收藏题目',
                       _BankScope.notes => '搜索笔记内容',
                     },
@@ -78,6 +79,11 @@ class _BankPageState extends ConsumerState<BankPage> {
                       value: _BankScope.papers,
                       label: Text('试卷'),
                       icon: Icon(Icons.description_outlined, size: 17),
+                    ),
+                    ButtonSegment(
+                      value: _BankScope.questions,
+                      label: Text('题目'),
+                      icon: Icon(Icons.manage_search, size: 17),
                     ),
                     ButtonSegment(
                       value: _BankScope.favorites,
@@ -105,6 +111,10 @@ class _BankPageState extends ConsumerState<BankPage> {
               _BankScope.papers => _PaperList(
                 query: normalized,
                 onStart: _startPaper,
+              ),
+              _BankScope.questions => _QuestionSearchList(
+                query: normalized,
+                onStart: _startQuestions,
               ),
               _BankScope.favorites => _FavoriteList(
                 query: normalized,
@@ -138,6 +148,18 @@ class _BankPageState extends ConsumerState<BankPage> {
     );
   }
 
+  /// 把搜到的题目直接组成一次练习。
+  /// 用户搜题的目的通常就是“把这批题再做一遍”，所以不要求先勾选。
+  Future<void> _startQuestions(List<QuestionContent> questions) {
+    return launchPractice(
+      context,
+      ref,
+      mode: PracticeMode.custom,
+      title: '搜索题目练习',
+      questions: questions,
+    );
+  }
+
   Future<void> _startFavorite(List<QuestionContent> questions) {
     return launchPractice(
       context,
@@ -149,7 +171,19 @@ class _BankPageState extends ConsumerState<BankPage> {
   }
 }
 
-enum _BankScope { papers, favorites, notes }
+enum _BankScope { papers, questions, favorites, notes }
+
+/// 题目搜索结果：题库全量按题干/材料/选项匹配。
+///
+/// 搜索词为空时不查库（返回空列表），避免一进题库页就把 58890 道题
+/// 全拉出来。key 带上 limit，搜索词变化时自动重新请求。
+final questionSearchProvider =
+    FutureProvider.family<List<QuestionContent>, String>((ref, query) {
+      if (query.trim().isEmpty) return Future.value(const []);
+      return Future.value(
+        ref.watch(contentRepositoryProvider).searchQuestions(query),
+      );
+    });
 
 class _PaperList extends ConsumerWidget {
   const _PaperList({required this.query, required this.onStart});
@@ -184,8 +218,17 @@ class _PaperList extends ConsumerWidget {
                   .toList(growable: false);
         if (filtered.isEmpty) {
           return ListView(
-            children: const [
-              AppEmptyState(title: '没有匹配的试卷', message: '换一个年份、地区或试卷名称试试。'),
+            children: [
+              AppEmptyState(
+                title: '没有匹配的试卷',
+                // 用户搜的往往是题干里的词（“基层治理”“追及问题”），
+                // 而不是试卷名。这里直接告诉他该切到哪个标签页，
+                // 否则他会以为题库里根本没有这道题。
+                message: query.isEmpty
+                    ? '换一个年份、地区或试卷名称试试。'
+                    : '试卷名里没有「$query」。想按题干、材料或选项文字找题，'
+                          '请切换到上方「题目」。',
+              ),
             ],
           );
         }
@@ -262,6 +305,99 @@ class _PaperRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 按题干 / 材料 / 选项文字搜题。
+class _QuestionSearchList extends ConsumerWidget {
+  const _QuestionSearchList({required this.query, required this.onStart});
+
+  final String query;
+  final Future<void> Function(List<QuestionContent> questions) onStart;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (query.isEmpty) {
+      return ListView(
+        children: const [
+          AppEmptyState(
+            title: '搜索题库',
+            message: '输入题干、材料或选项里的任意文字，就能找到那道题。',
+          ),
+        ],
+      );
+    }
+    final results = ref.watch(questionSearchProvider(query));
+    return results.when(
+      loading: () => const Center(
+        child: Padding(
+          padding: EdgeInsets.all(28),
+          child: CircularProgressIndicator(),
+        ),
+      ),
+      error: (error, stack) => Padding(
+        padding: const EdgeInsets.all(28),
+        child: Text('搜索题目失败：$error'),
+      ),
+      data: (questions) {
+        if (questions.isEmpty) {
+          return ListView(
+            children: [
+              AppEmptyState(
+                title: '没有匹配的题目',
+                message: '题库里没有包含「$query」的题干、材料或选项。换一个更短的关键词试试。',
+              ),
+            ],
+          );
+        }
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 28),
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '找到 ${questions.length} 道题',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () => onStart(questions),
+                    icon: const Icon(Icons.play_arrow, size: 18),
+                    label: Text('练习这 ${questions.length} 题'),
+                  ),
+                ],
+              ),
+            ),
+            HairlineList(
+              children: [
+                for (final question in questions)
+                  ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 7,
+                    ),
+                    title: Text(
+                      question.plainStem,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 5),
+                      child: Text(
+                        '${question.module} · 第 ${question.sequence} 题',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        );
+      },
     );
   }
 }
