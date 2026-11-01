@@ -156,3 +156,25 @@ class PracticeStreak {
   /// 最近一次计入的本地自然日，格式 `YYYY-MM-DD`。
   final String? lastDay;
 }
+
+/// 一次练习的作答概况（历史记录列表 / 回看成绩用）。
+class SessionSummary {
+  const SessionSummary({
+    required this.totalCount,
+    required this.answeredCount,
+    required this.correctCount,
+  });
+
+  static const empty = SessionSummary(
+    totalCount: 0,
+    answeredCount: 0,
+    correctCount: 0,
+  );
+
+  final int totalCount;
+  final int answeredCount;
+  final int correctCount;
+
+  int get scorePercent =>
+      answeredCount == 0 ? 0 : (correctCount * 100 / answeredCount).round();
+}
