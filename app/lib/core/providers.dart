@@ -124,3 +124,33 @@ final showTimerProvider = StreamProvider<bool>((ref) {
       .watchSetting('showTimer')
       .map((value) => value != 'false');
 });
+
+/// 一条「最近练习」记录：会话本身 + 作答概况。
+class RecentSessionEntry {
+  const RecentSessionEntry({required this.session, required this.summary});
+
+  final PracticeSession session;
+  final SessionSummary summary;
+}
+
+/// 最近完成（已交卷/已结束）的练习。
+///
+/// 早先成绩只存在结果页：按一下「返回首页」，sessionId 就再也拿不到，
+/// 用户想回看「昨天那组模考多少分」完全无处可去。统计页用它列出历史记录。
+///
+/// 必须监听会话表：交卷/结束时列表要立刻出现这一组，不能等重启 App。
+final recentSessionsProvider = StreamProvider<List<RecentSessionEntry>>((ref) {
+  final database = ref.watch(databaseProvider);
+  return database.watchRecentSessions(limit: 20).asyncMap((sessions) async {
+    final entries = <RecentSessionEntry>[];
+    for (final session in sessions) {
+      entries.add(
+        RecentSessionEntry(
+          session: session,
+          summary: await database.summarizeSession(session.id),
+        ),
+      );
+    }
+    return entries;
+  });
+});

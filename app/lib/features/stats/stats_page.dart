@@ -52,19 +52,14 @@ class _RecentSessions extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return FutureBuilder<List<_SessionRow>>(
-      future: _load(ref),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const LinearProgressIndicator(minHeight: 2);
-        }
-        if (snapshot.hasError) {
-          return Text(
-            '读取练习记录失败：${snapshot.error}',
-            style: Theme.of(context).textTheme.bodySmall,
-          );
-        }
-        final rows = snapshot.data ?? const <_SessionRow>[];
+    final state = ref.watch(recentSessionsProvider);
+    return state.when(
+      loading: () => const LinearProgressIndicator(minHeight: 2),
+      error: (error, stack) => Text(
+        '读取练习记录失败：$error',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      data: (rows) {
         if (rows.isEmpty) {
           return const AppEmptyState(
             title: '还没有已完成的练习',
@@ -87,28 +82,12 @@ class _RecentSessions extends ConsumerWidget {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 trailing: const Icon(Icons.arrow_forward, size: 17),
-                onTap: () =>
-                    context.push('/result/${row.session.id}'),
+                onTap: () => context.push('/result/${row.session.id}'),
               ),
           ],
         );
       },
     );
-  }
-
-  Future<List<_SessionRow>> _load(WidgetRef ref) async {
-    final database = ref.read(databaseProvider);
-    final sessions = await database.watchRecentSessions(limit: 20).first;
-    final rows = <_SessionRow>[];
-    for (final session in sessions) {
-      rows.add(
-        _SessionRow(
-          session: session,
-          summary: await database.summarizeSession(session.id),
-        ),
-      );
-    }
-    return rows;
   }
 
   String _formatDay(int millis) {
@@ -117,13 +96,6 @@ class _RecentSessions extends ConsumerWidget {
     final day = time.day.toString().padLeft(2, '0');
     return '${time.year}-$month-$day';
   }
-}
-
-class _SessionRow {
-  const _SessionRow({required this.session, required this.summary});
-
-  final PracticeSession session;
-  final SessionSummary summary;
 }
 
 class _ReviewCard extends ConsumerWidget {
