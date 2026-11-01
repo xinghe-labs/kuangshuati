@@ -37,15 +37,16 @@ class _WrongPageState extends ConsumerState<WrongPage> {
     final signature = items.map((item) => item.questionId).join('\u0000');
     if (_questionsFuture == null || _questionsSignature != signature) {
       _questionsSignature = signature;
-      _questionsFuture = Future.value(
-        ref
-            .read(contentRepositoryProvider)
-            .questionsByIds(items.map((item) => item.questionId)),
-      ).then(
-        (questions) => {
-          for (final question in questions) question.id: question,
-        },
-      );
+      _questionsFuture =
+          Future.value(
+            ref
+                .read(contentRepositoryProvider)
+                .questionsByIds(items.map((item) => item.questionId)),
+          ).then(
+            (questions) => {
+              for (final question in questions) question.id: question,
+            },
+          );
     }
     return _questionsFuture!;
   }
@@ -80,12 +81,10 @@ class _WrongPageState extends ConsumerState<WrongPage> {
           data: (items) {
             final filtered = switch (filter) {
               _WrongFilter.all => items.toList(),
-              _WrongFilter.mastered => items
-                  .where((item) => item.mastered)
-                  .toList(),
-              _WrongFilter.due => items
-                  .where((item) => !item.mastered)
-                  .toList(),
+              _WrongFilter.mastered =>
+                items.where((item) => item.mastered).toList(),
+              _WrongFilter.due =>
+                items.where((item) => !item.mastered).toList(),
             };
             if (filter != _WrongFilter.mastered) {
               filtered.sort((a, b) {
@@ -296,35 +295,44 @@ class _ReviewRow extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  Text(
-                    '阶段 ${item.stage + 1} / 5',
-                    style: TextStyle(
-                      color: AppColors.muted,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 3,
-                    ),
-                    color: due && !item.mastered
-                        ? AppColors.negativeFill
-                        : AppColors.softFill,
+                  Expanded(
                     child: Text(
-                      item.mastered
-                          ? '已掌握'
-                          : due
-                          ? '今日到期'
-                          : _nextReviewLabel(item.nextReviewAt),
+                      '阶段 ${item.stage + 1} / 5',
                       style: TextStyle(
-                        color: due && !item.mastered
-                            ? AppColors.negative
-                            : AppColors.muted,
+                        color: AppColors.muted,
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // 早先这里是 Text + Spacer + 胶囊，两者都不让位：
+                  // 系统字号一放大（或小屏手机），整行直接向右溢出 52px，
+                  // 右侧的「今日到期」胶囊被裁掉一半。
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 3,
+                      ),
+                      color: due && !item.mastered
+                          ? AppColors.negativeFill
+                          : AppColors.softFill,
+                      child: Text(
+                        item.mastered
+                            ? '已掌握'
+                            : due
+                            ? '今日到期'
+                            : _nextReviewLabel(item.nextReviewAt),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: due && !item.mastered
+                              ? AppColors.negative
+                              : AppColors.muted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),
@@ -340,11 +348,16 @@ class _ReviewRow extends ConsumerWidget {
               const SizedBox(height: 9),
               Row(
                 children: [
-                  Text(
-                    '${question.module} · 错 ${item.wrongCount} 次 · 空 ${item.blankCount} 次',
-                    style: Theme.of(context).textTheme.bodySmall,
+                  Expanded(
+                    child: Text(
+                      '${question.module} · 错 ${item.wrongCount} 次 · '
+                      '空 ${item.blankCount} 次',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 6),
+                  // 同样的问题：「模块 · 错 N 次 · 空 N 次」加右侧按钮
+                  // 在 360 宽 + 默认字号下就溢出 52px，右侧按钮被切掉。
                   TextButton.icon(
                     onPressed: () => onMastered(!showMastered),
                     icon: Icon(

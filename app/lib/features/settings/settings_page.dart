@@ -51,23 +51,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               icon: Icons.format_size,
               title: '题目字号',
               subtitle: '调整题干和选项的文字大小',
-              trailing: SegmentedButton<double>(
-                segments: const [
-                  ButtonSegment(value: 0.9, label: Text('小')),
-                  ButtonSegment(value: 1, label: Text('标准')),
-                  ButtonSegment(value: 1.15, label: Text('大')),
-                ],
-                selected: {_nearestScale(fontScale)},
-                showSelectedIcon: false,
-                style: const ButtonStyle(
-                  visualDensity: VisualDensity.compact,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              trailing: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                // 三档字号按钮是固定宽度：320 宽的小屏 + 系统字号 2.0 时
+                // 整行会向右溢出 6px，右侧「大」被切掉。
+                child: SegmentedButton<double>(
+                  segments: const [
+                    ButtonSegment(value: 0.9, label: Text('小')),
+                    ButtonSegment(value: 1, label: Text('标准')),
+                    ButtonSegment(value: 1.15, label: Text('大')),
+                  ],
+                  selected: {_nearestScale(fontScale)},
+                  showSelectedIcon: false,
+                  style: const ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onSelectionChanged: (selection) {
+                    ref
+                        .read(databaseProvider)
+                        .setSetting('fontScale', selection.first.toString());
+                  },
                 ),
-                onSelectionChanged: (selection) {
-                  ref
-                      .read(databaseProvider)
-                      .setSetting('fontScale', selection.first.toString());
-                },
               ),
             ),
             _divider,
@@ -275,7 +281,13 @@ class _SettingTile extends StatelessWidget {
               ],
             ),
           ),
-          if (trailing != null) ...[const SizedBox(width: 10), trailing!],
+          if (trailing != null) ...[
+            const SizedBox(width: 10),
+            // 右侧控件可能比剩下的宽度还宽（例如三档字号按钮、
+            // 「版本 x.y.z」长文本）：包成 Flexible 让它参与收缩，
+            // 否则整行会向右溢出。
+            Flexible(child: trailing!),
+          ],
         ],
       ),
     );

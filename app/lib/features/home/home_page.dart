@@ -143,9 +143,9 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
     if (!context.mounted) return;
     if (restart) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('题库已全部练过一遍，这次从第一题重新开始')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('题库已全部练过一遍，这次从第一题重新开始')));
     }
     await launchPractice(
       context,
@@ -373,18 +373,38 @@ class _ActionGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth >= 620 ? 4 : 2;
-        // 卡片高度随系统字号线性放大，避免大字号下标题/描述溢出。
-        final textScale = MediaQuery.textScalerOf(context).scale(1.0);
-        return GridView.count(
-          crossAxisCount: columns,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          mainAxisExtent:
-              (columns == 4 ? 100 : 118) * textScale.clamp(0.8, 2.0),
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          children: children,
-        );
+        // 不用 GridView 的固定 mainAxisExtent：
+        // 早先是 118 × textScale 的写死高度，但卡片的实际内容高度
+        // 不只跟字号线性相关（标题会换行、描述会折行），
+        // 360 宽 + 字号 2.0 时整张卡片底部溢出 48px，
+        // 320 宽时连字号 1.0 都会溢出 34px。
+        // 改成按行排布 + IntrinsicHeight，高度由内容自己决定。
+        final rows = <Widget>[];
+        for (var start = 0; start < children.length; start += columns) {
+          final end = (start + columns).clamp(0, children.length);
+          final slice = children.sublist(start, end);
+          rows.add(
+            Padding(
+              padding: EdgeInsets.only(top: start == 0 ? 0 : 10),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var index = 0; index < columns; index++) ...[
+                      if (index > 0) const SizedBox(width: 10),
+                      Expanded(
+                        child: index < slice.length
+                            ? slice[index]
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+        return Column(children: rows);
       },
     );
   }
@@ -420,6 +440,7 @@ class _ActionTile extends StatelessWidget {
           padding: const EdgeInsets.all(13),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Row(
                 children: [
@@ -435,14 +456,29 @@ class _ActionTile extends StatelessWidget {
                   Icon(icon, size: 19, color: AppColors.ink),
                 ],
               ),
-              const Spacer(),
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 3),
-              Text(
-                detail,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall,
+              // 卡片高度现在由内容决定（见 _ActionGrid），
+              // 不再需要 Spacer 撑高度，也不会有固定高度导致的溢出。
+              const SizedBox(height: 10),
+              Flexible(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      detail,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
