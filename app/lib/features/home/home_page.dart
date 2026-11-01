@@ -121,17 +121,25 @@ class _HomePageState extends ConsumerState<HomePage> {
     // 题库共 58890 题却永远只能做到前 100 道。
     final database = ref.read(databaseProvider);
     final repository = ref.read(contentRepositoryProvider);
-    final answered = await database.answeredQuestionIds();
-    var questions = await repository.sequenceQuestions(
-      limit: 100,
-      excludeIds: answered,
-    );
+    var questions = const <QuestionContent>[];
     var restart = false;
-    if (questions.isEmpty) {
-      // 题库里能做的都做完了（或题库本来就空），退回从头开始，
-      // 但明确告知用户这是重刷，而不是默默又发一批旧题。
-      questions = await repository.sequenceQuestions(limit: 100);
-      restart = true;
+    try {
+      final answered = await database.answeredQuestionIds();
+      questions = await repository.sequenceQuestions(
+        limit: 100,
+        excludeIds: answered,
+      );
+      if (questions.isEmpty) {
+        // 题库里能做的都做完了（或题库本来就空），退回从头开始，
+        // 但明确告知用户这是重刷，而不是默默又发一批旧题。
+        questions = await repository.sequenceQuestions(limit: 100);
+        restart = true;
+      }
+    } on Object catch (error) {
+      // 题库文件损坏/读取失败时，以前异常直接抛到手势回调，
+      // 用户点了「顺序练习」屏幕毫无反应，只能反复点。
+      if (context.mounted) showContentError(context, error);
+      return;
     }
     if (!context.mounted) return;
     if (restart) {
@@ -150,7 +158,13 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Future<void> _startRandom(BuildContext context, WidgetRef ref) async {
-    final questions = await randomQuestions(ref, 20);
+    final List<QuestionContent> questions;
+    try {
+      questions = await randomQuestions(ref, 20);
+    } on Object catch (error) {
+      if (context.mounted) showContentError(context, error);
+      return;
+    }
     if (!context.mounted) return;
     await launchPractice(
       context,
@@ -164,16 +178,22 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Future<void> _startReviews(BuildContext context, WidgetRef ref) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    final reviewItems = await ref.read(databaseProvider).allReviewItems();
-    final dueIds = reviewItems
-        .where(
-          (item) =>
-              !item.mastered &&
-              (item.nextReviewAt == null || item.nextReviewAt! <= now),
-        )
-        .map((item) => item.questionId);
-    if (!context.mounted) return;
-    final questions = await questionsFromIds(ref, dueIds);
+    final List<QuestionContent> questions;
+    try {
+      final reviewItems = await ref.read(databaseProvider).allReviewItems();
+      final dueIds = reviewItems
+          .where(
+            (item) =>
+                !item.mastered &&
+                (item.nextReviewAt == null || item.nextReviewAt! <= now),
+          )
+          .map((item) => item.questionId);
+      if (!context.mounted) return;
+      questions = await questionsFromIds(ref, dueIds);
+    } on Object catch (error) {
+      if (context.mounted) showContentError(context, error);
+      return;
+    }
     if (!context.mounted) return;
     await launchPractice(
       context,
@@ -190,9 +210,15 @@ class _HomePageState extends ConsumerState<HomePage> {
     Paper paper, {
     bool mock = false,
   }) async {
-    final questions = await ref
-        .read(contentRepositoryProvider)
-        .questionsForPaper(paper.id);
+    final List<QuestionContent> questions;
+    try {
+      questions = await ref
+          .read(contentRepositoryProvider)
+          .questionsForPaper(paper.id);
+    } on Object catch (error) {
+      if (context.mounted) showContentError(context, error);
+      return;
+    }
     if (!context.mounted) return;
     await launchPractice(
       context,

@@ -32,19 +32,52 @@ Future<void> launchPractice(
     if (revealNow == 'false') effectiveReveal = RevealMode.afterSubmit;
   }
   final id = 'session-${DateTime.now().microsecondsSinceEpoch}';
-  await ref
-      .read(databaseProvider)
-      .createSession(
-        id: id,
-        mode: mode,
-        title: title,
-        questions: questions,
-        revealMode: effectiveReveal,
-        paperId: paperId,
-        requestedCount: requestedCount,
-        timeLimitSeconds: timeLimitSeconds,
-      );
+  try {
+    await ref
+        .read(databaseProvider)
+        .createSession(
+          id: id,
+          mode: mode,
+          title: title,
+          questions: questions,
+          revealMode: effectiveReveal,
+          paperId: paperId,
+          requestedCount: requestedCount,
+          timeLimitSeconds: timeLimitSeconds,
+        );
+  } on Object catch (error) {
+    // 建会话失败（磁盘满、数据库被锁、记录损坏）时以前什么都不做：
+    // 用户点了「随机 20 题」或「继续练习」，界面没任何反应，只能反复点。
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('无法开始练习：$error')),
+    );
+    return;
+  }
   if (context.mounted) context.push('/practice/$id');
+}
+
+/// 把「读题库」失败的异常变成一句用户能看懂的话。
+///
+/// 首页/统计/题库页在点入口时直接 await 题库读取，题库文件损坏、
+/// 磁盘 I/O 出错时异常会直接抛到手势回调里：用户点了一下，屏幕
+/// 毫无变化，也没有任何可重试的地方。
+String describeContentError(Object error) {
+  final message = error.toString();
+  if (message.contains('SocketException') ||
+      message.contains('HttpException') ||
+      message.contains('HandshakeException')) {
+    return '题库读取失败：网络不可用或连接被打断，请检查网络后重试。';
+  }
+  return '题库读取失败，请稍后重试（$message）';
+}
+
+/// 题库读取失败时统一提示，避免各页面各写一套。
+void showContentError(BuildContext context, Object error) {
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(describeContentError(error))));
 }
 
 Future<List<QuestionContent>> questionsFromIds(

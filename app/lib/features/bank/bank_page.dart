@@ -132,9 +132,16 @@ class _BankPageState extends ConsumerState<BankPage> {
   }
 
   Future<void> _startPaper(Paper paper, {bool mock = false}) async {
-    final questions = await ref
-        .read(contentRepositoryProvider)
-        .questionsForPaper(paper.id);
+    final List<QuestionContent> questions;
+    try {
+      questions = await ref
+          .read(contentRepositoryProvider)
+          .questionsForPaper(paper.id);
+    } on Object catch (error) {
+      // 题库读取失败时以前什么都不做，用户点试卷没反应。
+      if (mounted) showContentError(context, error);
+      return;
+    }
     if (!mounted) return;
     await launchPractice(
       context,
