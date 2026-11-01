@@ -411,6 +411,10 @@ class _QuestionSearchList extends ConsumerWidget {
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
+                    // 搜索结果整行可点：只给一个「练习这 N 题」的话，
+                    // 用户搜到想确认的那道题没法单独打开看解析，
+                    // 只能把 200 道全开成一组练习再翻。
+                    onTap: () => onStart([question]),
                   ),
               ],
             ),
@@ -569,6 +573,10 @@ class _FavoriteListState extends ConsumerState<_FavoriteList> {
                             ],
                           ),
                         ),
+                        // 收藏行也整行可点：以前只有右上角的书签按钮能点，
+                        // 想打开这道题看解析、看自己写的笔记，只能把整组收藏
+                        // 变成一次练习再翻到它。
+                        onTap: () => widget.onStart([question]),
                         trailing: IconButton(
                           tooltip: '取消收藏',
                           onPressed: () => _removeFavorite(question.id),
@@ -732,6 +740,7 @@ class _NoteListState extends ConsumerState<_NoteList> {
                             ],
                           ),
                         ),
+                        onTap: () => widget.onStart([question]),
                         trailing: IconButton(
                           tooltip: '删除笔记',
                           onPressed: () => _deleteNote(question.id),
