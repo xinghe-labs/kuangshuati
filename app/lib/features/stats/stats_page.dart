@@ -78,7 +78,12 @@ class _RecentSessions extends ConsumerWidget {
                 subtitle: Text(
                   '${_formatDay(row.session.updatedAt)} · '
                   '${row.summary.answeredCount}/${row.summary.totalCount} 题 · '
-                  '正确率 ${row.summary.scorePercent}%',
+                  // 模考看「得分率」（分母是整卷题数，未答按 0 分），
+                  // 练习看「正确率」（分母是已答题数）。这里以前统一写
+                  // “正确率”，于是一场 100 题只答 50 题的模考，列表里
+                  // 显示“50/100 题 · 正确率 80%”，和结果页的 40% 对不上。
+                  '${row.session.mode == 'mock' ? '得分率' : '正确率'} '
+                  '${_ratePercent(row)}%',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 trailing: const Icon(Icons.arrow_forward, size: 17),
@@ -88,6 +93,15 @@ class _RecentSessions extends ConsumerWidget {
         );
       },
     );
+  }
+
+  /// 与结果页口径一致：模考分母是整卷题数，练习分母是已答题数。
+  int _ratePercent(RecentSessionEntry row) {
+    final base = row.session.mode == 'mock'
+        ? row.summary.totalCount
+        : row.summary.answeredCount;
+    if (base == 0) return 0;
+    return (row.summary.correctCount * 100 / base).round();
   }
 
   String _formatDay(int millis) {
