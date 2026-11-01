@@ -268,33 +268,32 @@ class AppDatabase extends _$AppDatabase {
     )..where((row) => row.sessionId.equals(sessionId))).get();
   }
 
-  /// 某次练习里已提交的题目数（首页「继续练习」的“已答 N 题”）。
+  /// 某次练习里已经作答的题目数（首页「继续练习」的“已答 N 题”）。
   ///
   /// 必须是 Stream：首页早先用 Future 只读一次，用户回首页继续做几题后
   /// 数字不会变（实测答完 5 题仍显示 1），看起来像进度丢了。
+  ///
+  /// 不能只看 submitted：模考和「关闭立即出答案」模式下，练习页每选一个
+  /// 选项就落库一次，但 submitted 要等交卷才置 true。只看 submitted 的话，
+  /// 模考答了 3 题退出，首页仍然写“这一组还没有提交答案”。
+  /// 所以改成“选过选项就算已答”，与练习页/答题卡的口径一致。
   Stream<int> watchSubmittedCount(String sessionId) {
-    final count = sessionAnswers.questionId.count();
-    return (selectOnly(sessionAnswers)
-          ..addColumns([count])
-          ..where(
-            sessionAnswers.sessionId.equals(sessionId) &
-                sessionAnswers.submitted.equals(true),
-          ))
-        .watchSingle()
-        .map((row) => row.read(count) ?? 0);
+    return (select(sessionAnswers)
+          ..where((row) => row.sessionId.equals(sessionId)))
+        .watch()
+        .map(
+          (rows) => rows
+              .where((row) => _decodeSelected(row.selectedJson).isNotEmpty)
+              .length,
+        );
   }
 
-  /// 一次性读取已提交题目数（弹「结束旧练习？」确认时用）。
+  /// 一次性读取已作答题数（弹「结束旧练习？」确认时用）。
   Future<int> submittedCountFor(String sessionId) async {
-    final count = sessionAnswers.questionId.count();
-    final row = await (selectOnly(sessionAnswers)
-          ..addColumns([count])
-          ..where(
-            sessionAnswers.sessionId.equals(sessionId) &
-                sessionAnswers.submitted.equals(true),
-          ))
-        .getSingle();
-    return row.read(count) ?? 0;
+    final rows = await answersForSession(sessionId);
+    return rows
+        .where((row) => _decodeSelected(row.selectedJson).isNotEmpty)
+        .length;
   }
 
   Future<List<ReviewItem>> allReviewItems() {
