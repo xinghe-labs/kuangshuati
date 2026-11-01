@@ -135,7 +135,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _SettingTile(
               icon: Icons.delete_sweep_outlined,
               title: '清空练习记录',
-              subtitle: '删除答题历史、错题本、收藏和统计，不影响题库；建议先导出备份',
+              subtitle: '删除答题历史、错题本、收藏、笔记和统计，不影响题库；建议先导出备份',
               trailing: const Icon(Icons.chevron_right, size: 20),
               onTap: () => _confirmClearData(),
             ),
@@ -191,7 +191,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清空练习记录'),
-        content: const Text('将删除答题历史、错题本、收藏和统计数据。此操作不可恢复，题库不受影响。'),
+        content: const Text(
+          '将删除答题历史、错题本、收藏（含你写的笔记）和统计数据。'
+          '此操作不可恢复，题库不受影响。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),

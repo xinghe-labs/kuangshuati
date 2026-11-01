@@ -247,8 +247,10 @@ class _ResultPageState extends ConsumerState<ResultPage> {
                 padding: const EdgeInsets.all(12),
                 color: AppColors.softFill,
                 child: Text(
-                  '有 $missingCount 道题已随题库更新失效，无法展示，'
-                  '也不计入正确率。',
+                  // 分母现在按会话记录算（模考=整卷题数，练习=已答题数），
+                  // 失效题并没有被排除在外，所以不能说“不计入正确率”。
+                  '有 $missingCount 道题已随题库更新失效，无法展示逐题回顾；'
+                  '上面的正确率仍按你当时的作答计算。',
                   style: TextStyle(color: AppColors.muted, fontSize: 12),
                 ),
               ),
