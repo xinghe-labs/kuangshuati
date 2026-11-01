@@ -452,6 +452,27 @@ class _FavoriteListState extends ConsumerState<_FavoriteList> {
     return _future!;
   }
 
+  /// 取消收藏给一条带「撤销」的提示。
+  ///
+  /// 收藏列表里的书签图标就在标题右侧，很容易误触：以前点一下，那一行
+  /// 立刻从列表里消失，既没有提示也没有撤销入口，用户只能去题库里重新搜。
+  Future<void> _removeFavorite(String questionId) async {
+    final database = ref.read(databaseProvider);
+    await database.toggleFavorite(questionId);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: const Text('已取消收藏，笔记仍然保留'),
+          action: SnackBarAction(
+            label: '撤销',
+            onPressed: () => database.toggleFavorite(questionId),
+          ),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
     final favorites = ref.watch(favoritesProvider);
@@ -550,9 +571,7 @@ class _FavoriteListState extends ConsumerState<_FavoriteList> {
                         ),
                         trailing: IconButton(
                           tooltip: '取消收藏',
-                          onPressed: () => ref
-                              .read(databaseProvider)
-                              .toggleFavorite(question.id),
+                          onPressed: () => _removeFavorite(question.id),
                           icon: Icon(
                             Icons.bookmark,
                             size: 20,
