@@ -257,6 +257,22 @@ class AppDatabase extends _$AppDatabase {
     )..where((row) => row.sessionId.equals(sessionId))).get();
   }
 
+  /// 某次练习里已提交的题目数（首页「继续练习」的“已答 N 题”）。
+  ///
+  /// 必须是 Stream：首页早先用 Future 只读一次，用户回首页继续做几题后
+  /// 数字不会变（实测答完 5 题仍显示 1），看起来像进度丢了。
+  Stream<int> watchSubmittedCount(String sessionId) {
+    final count = sessionAnswers.questionId.count();
+    return (selectOnly(sessionAnswers)
+          ..addColumns([count])
+          ..where(
+            sessionAnswers.sessionId.equals(sessionId) &
+                sessionAnswers.submitted.equals(true),
+          ))
+        .watchSingle()
+        .map((row) => row.read(count) ?? 0);
+  }
+
   Future<List<ReviewItem>> allReviewItems() {
     return (select(reviewItems)..orderBy([
           (row) => OrderingTerm.asc(row.mastered),
