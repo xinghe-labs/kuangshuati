@@ -1412,6 +1412,21 @@ class $SessionAnswersTable extends SessionAnswers
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _moduleCountedMeta = const VerificationMeta(
+    'moduleCounted',
+  );
+  @override
+  late final GeneratedColumn<bool> moduleCounted = GeneratedColumn<bool>(
+    'module_counted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("module_counted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     sessionId,
@@ -1422,6 +1437,7 @@ class $SessionAnswersTable extends SessionAnswers
     uncertain,
     durationMs,
     answeredAt,
+    moduleCounted,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1490,6 +1506,15 @@ class $SessionAnswersTable extends SessionAnswers
         answeredAt.isAcceptableOrUnknown(data['answered_at']!, _answeredAtMeta),
       );
     }
+    if (data.containsKey('module_counted')) {
+      context.handle(
+        _moduleCountedMeta,
+        moduleCounted.isAcceptableOrUnknown(
+          data['module_counted']!,
+          _moduleCountedMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1531,6 +1556,10 @@ class $SessionAnswersTable extends SessionAnswers
         DriftSqlType.int,
         data['${effectivePrefix}answered_at'],
       ),
+      moduleCounted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}module_counted'],
+      )!,
     );
   }
 
@@ -1549,6 +1578,12 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
   final bool uncertain;
   final int durationMs;
   final int? answeredAt;
+
+  /// 这道题是否已经在提交那一刻实时计入过「模块统计」。
+  /// 练习模式（答完立刻出答案）在 saveAnswer 里就累计了模块，
+  /// 交卷时必须跳过它，否则同一题会被算两次；
+  /// 模考/交卷后统一判分的题在交卷时才算，标记后同样不会重复。
+  final bool moduleCounted;
   const SessionAnswer({
     required this.sessionId,
     required this.questionId,
@@ -1558,6 +1593,7 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
     required this.uncertain,
     required this.durationMs,
     this.answeredAt,
+    required this.moduleCounted,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1574,6 +1610,7 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
     if (!nullToAbsent || answeredAt != null) {
       map['answered_at'] = Variable<int>(answeredAt);
     }
+    map['module_counted'] = Variable<bool>(moduleCounted);
     return map;
   }
 
@@ -1591,6 +1628,7 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
       answeredAt: answeredAt == null && nullToAbsent
           ? const Value.absent()
           : Value(answeredAt),
+      moduleCounted: Value(moduleCounted),
     );
   }
 
@@ -1608,6 +1646,7 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
       uncertain: serializer.fromJson<bool>(json['uncertain']),
       durationMs: serializer.fromJson<int>(json['durationMs']),
       answeredAt: serializer.fromJson<int?>(json['answeredAt']),
+      moduleCounted: serializer.fromJson<bool>(json['moduleCounted']),
     );
   }
   @override
@@ -1622,6 +1661,7 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
       'uncertain': serializer.toJson<bool>(uncertain),
       'durationMs': serializer.toJson<int>(durationMs),
       'answeredAt': serializer.toJson<int?>(answeredAt),
+      'moduleCounted': serializer.toJson<bool>(moduleCounted),
     };
   }
 
@@ -1634,6 +1674,7 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
     bool? uncertain,
     int? durationMs,
     Value<int?> answeredAt = const Value.absent(),
+    bool? moduleCounted,
   }) => SessionAnswer(
     sessionId: sessionId ?? this.sessionId,
     questionId: questionId ?? this.questionId,
@@ -1643,6 +1684,7 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
     uncertain: uncertain ?? this.uncertain,
     durationMs: durationMs ?? this.durationMs,
     answeredAt: answeredAt.present ? answeredAt.value : this.answeredAt,
+    moduleCounted: moduleCounted ?? this.moduleCounted,
   );
   SessionAnswer copyWithCompanion(SessionAnswersCompanion data) {
     return SessionAnswer(
@@ -1662,6 +1704,9 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
       answeredAt: data.answeredAt.present
           ? data.answeredAt.value
           : this.answeredAt,
+      moduleCounted: data.moduleCounted.present
+          ? data.moduleCounted.value
+          : this.moduleCounted,
     );
   }
 
@@ -1675,7 +1720,8 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
           ..write('isCorrect: $isCorrect, ')
           ..write('uncertain: $uncertain, ')
           ..write('durationMs: $durationMs, ')
-          ..write('answeredAt: $answeredAt')
+          ..write('answeredAt: $answeredAt, ')
+          ..write('moduleCounted: $moduleCounted')
           ..write(')'))
         .toString();
   }
@@ -1690,6 +1736,7 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
     uncertain,
     durationMs,
     answeredAt,
+    moduleCounted,
   );
   @override
   bool operator ==(Object other) =>
@@ -1702,7 +1749,8 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
           other.isCorrect == this.isCorrect &&
           other.uncertain == this.uncertain &&
           other.durationMs == this.durationMs &&
-          other.answeredAt == this.answeredAt);
+          other.answeredAt == this.answeredAt &&
+          other.moduleCounted == this.moduleCounted);
 }
 
 class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
@@ -1714,6 +1762,7 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
   final Value<bool> uncertain;
   final Value<int> durationMs;
   final Value<int?> answeredAt;
+  final Value<bool> moduleCounted;
   final Value<int> rowid;
   const SessionAnswersCompanion({
     this.sessionId = const Value.absent(),
@@ -1724,6 +1773,7 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
     this.uncertain = const Value.absent(),
     this.durationMs = const Value.absent(),
     this.answeredAt = const Value.absent(),
+    this.moduleCounted = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SessionAnswersCompanion.insert({
@@ -1735,6 +1785,7 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
     this.uncertain = const Value.absent(),
     this.durationMs = const Value.absent(),
     this.answeredAt = const Value.absent(),
+    this.moduleCounted = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : sessionId = Value(sessionId),
        questionId = Value(questionId);
@@ -1747,6 +1798,7 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
     Expression<bool>? uncertain,
     Expression<int>? durationMs,
     Expression<int>? answeredAt,
+    Expression<bool>? moduleCounted,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1758,6 +1810,7 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
       if (uncertain != null) 'uncertain': uncertain,
       if (durationMs != null) 'duration_ms': durationMs,
       if (answeredAt != null) 'answered_at': answeredAt,
+      if (moduleCounted != null) 'module_counted': moduleCounted,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1771,6 +1824,7 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
     Value<bool>? uncertain,
     Value<int>? durationMs,
     Value<int?>? answeredAt,
+    Value<bool>? moduleCounted,
     Value<int>? rowid,
   }) {
     return SessionAnswersCompanion(
@@ -1782,6 +1836,7 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
       uncertain: uncertain ?? this.uncertain,
       durationMs: durationMs ?? this.durationMs,
       answeredAt: answeredAt ?? this.answeredAt,
+      moduleCounted: moduleCounted ?? this.moduleCounted,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1813,6 +1868,9 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
     if (answeredAt.present) {
       map['answered_at'] = Variable<int>(answeredAt.value);
     }
+    if (moduleCounted.present) {
+      map['module_counted'] = Variable<bool>(moduleCounted.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1830,6 +1888,7 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
           ..write('uncertain: $uncertain, ')
           ..write('durationMs: $durationMs, ')
           ..write('answeredAt: $answeredAt, ')
+          ..write('moduleCounted: $moduleCounted, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4387,6 +4446,7 @@ typedef $$SessionAnswersTableCreateCompanionBuilder =
       Value<bool> uncertain,
       Value<int> durationMs,
       Value<int?> answeredAt,
+      Value<bool> moduleCounted,
       Value<int> rowid,
     });
 typedef $$SessionAnswersTableUpdateCompanionBuilder =
@@ -4399,6 +4459,7 @@ typedef $$SessionAnswersTableUpdateCompanionBuilder =
       Value<bool> uncertain,
       Value<int> durationMs,
       Value<int?> answeredAt,
+      Value<bool> moduleCounted,
       Value<int> rowid,
     });
 
@@ -4448,6 +4509,11 @@ class $$SessionAnswersTableFilterComposer
 
   ColumnFilters<int> get answeredAt => $composableBuilder(
     column: $table.answeredAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get moduleCounted => $composableBuilder(
+    column: $table.moduleCounted,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -4500,6 +4566,11 @@ class $$SessionAnswersTableOrderingComposer
     column: $table.answeredAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get moduleCounted => $composableBuilder(
+    column: $table.moduleCounted,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SessionAnswersTableAnnotationComposer
@@ -4540,6 +4611,11 @@ class $$SessionAnswersTableAnnotationComposer
 
   GeneratedColumn<int> get answeredAt => $composableBuilder(
     column: $table.answeredAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get moduleCounted => $composableBuilder(
+    column: $table.moduleCounted,
     builder: (column) => column,
   );
 }
@@ -4585,6 +4661,7 @@ class $$SessionAnswersTableTableManager
                 Value<bool> uncertain = const Value.absent(),
                 Value<int> durationMs = const Value.absent(),
                 Value<int?> answeredAt = const Value.absent(),
+                Value<bool> moduleCounted = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SessionAnswersCompanion(
                 sessionId: sessionId,
@@ -4595,6 +4672,7 @@ class $$SessionAnswersTableTableManager
                 uncertain: uncertain,
                 durationMs: durationMs,
                 answeredAt: answeredAt,
+                moduleCounted: moduleCounted,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -4607,6 +4685,7 @@ class $$SessionAnswersTableTableManager
                 Value<bool> uncertain = const Value.absent(),
                 Value<int> durationMs = const Value.absent(),
                 Value<int?> answeredAt = const Value.absent(),
+                Value<bool> moduleCounted = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SessionAnswersCompanion.insert(
                 sessionId: sessionId,
@@ -4617,6 +4696,7 @@ class $$SessionAnswersTableTableManager
                 uncertain: uncertain,
                 durationMs: durationMs,
                 answeredAt: answeredAt,
+                moduleCounted: moduleCounted,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
