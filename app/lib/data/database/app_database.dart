@@ -52,10 +52,15 @@ class SessionAnswers extends Table {
   IntColumn get durationMs => integer().withDefault(const Constant(0))();
   IntColumn get answeredAt => integer().nullable()();
 
-  /// 这道题是否已经在提交那一刻实时计入过「模块统计」。
+  /// 这道题是否已经计入过「模块统计」（题数 + 正确数）。
+  ///
   /// 练习模式（答完立刻出答案）在 saveAnswer 里就累计了模块，
   /// 交卷时必须跳过它，否则同一题会被算两次；
   /// 模考/交卷后统一判分的题在交卷时才算，标记后同样不会重复。
+  ///
+  /// 注意它必须保持单调（一旦 true 不再回 false）：saveAnswer 用
+  /// insertOnConflictUpdate 整行覆盖，未提交的保存不能把它洗回 false，
+  /// 否则交卷时会重复累加。
   BoolColumn get moduleCounted => boolean().withDefault(const Constant(false))();
 
   @override
@@ -600,6 +605,34 @@ class AppDatabase extends _$AppDatabase {
                   row.questionId.equals(questionId),
             ))
             .getSingleOrNull();
+    // 只要真的选过选项就算“做了这题”，不能只看 submitted：
+    //
+    // 模考和“关闭立即出答案”的练习模式下，练习页每选一个选项就落库一次
+    // （submitted=false），要等交卷才置 true。早先这里只数 submitted，
+    // 于是用户在一场 100 题模考里答了 60 题后退出：
+    //   - 首页「继续练习」显示「已答 60 题」（submittedCountFor 按选过选项算）
+    //   - 统计页「今日已答」却是 0（只在 firstSubmit 时累计）
+    //   - 结果页又写「已答 60」
+    // 同一个事实三处数字互相矛盾，用户会以为统计坏了。
+    final nowSelected = selected.isNotEmpty;
+    final wasSelected =
+        existing != null && _decodeSelected(existing.selectedJson).isNotEmpty;
+    final firstAnswer = nowSelected && !wasSelected;
+    // 模块统计的题数/正确数只能算一次：用 moduleCounted 记住是否已计过，
+    // 后续重存（改选项、翻题、标记不确定、退出前保存）只补时长增量。
+    final countedBefore = existing?.moduleCounted ?? false;
+    // 模块的题数和正确数必须“确定判过分”才记：
+    // 模考中途选完选项但没交卷时 isCorrect 是 null，把它当 0 分计入，
+    // 会凭空拉低该模块正确率；交卷时 finalizeSession 会按真实判分补计。
+    final graded = isCorrect != null;
+    final countsNow =
+        nowSelected && graded && module != null && module.isNotEmpty;
+    // 时长是累计值（练习页每次都传本题的累计用时），只能补增量，
+    // 否则每翻一次题都会把模块总时长再加一遍。
+    final previousDurationMs = existing?.durationMs ?? 0;
+    final durationDelta = durationMs > previousDurationMs
+        ? durationMs - previousDurationMs
+        : 0;
     await into(sessionAnswers).insertOnConflictUpdate(
       SessionAnswersCompanion.insert(
         sessionId: sessionId,
@@ -610,52 +643,54 @@ class AppDatabase extends _$AppDatabase {
         uncertain: Value(uncertain),
         durationMs: Value(durationMs),
         answeredAt: Value(now),
-        // 只有真正提交的答案才可能在这一步计入模块统计。
-        moduleCounted: Value(
-          submitted && module != null && module.isNotEmpty,
-        ),
+        // 已经计过就必须保持 true：insertOnConflictUpdate 会整行覆盖，
+        // 否则一次未提交的保存就能把它清回 false，交卷时又重复计一次。
+        moduleCounted: Value(countedBefore || countsNow),
       ),
     );
     final session = await sessionById(sessionId);
     await (update(practiceSessions)..where((row) => row.id.equals(sessionId)))
         .write(PracticeSessionsCompanion(updatedAt: Value(now)));
-    // 首次提交时实时计入“今日已答”，不用等交卷：
-    // 练习中退出后再看统计，当天数字不再归零。
-    // 后续重存（翻题、标记不确定、退出前保存）不重复计数。
-    final firstSubmit = submitted && (existing == null || !existing.submitted);
-    if (firstSubmit) {
+    final shouldCount = countsNow && !countedBefore;
+    if (firstAnswer || shouldCount || durationDelta > 0) {
       await _accumulateDailyStats(
-        answered: 1,
-        correct: isCorrect == true ? 1 : 0,
-        durationMs: durationMs,
-        bumpStreak: true,
+        answered: firstAnswer ? 1 : 0,
+        correct: firstAnswer && isCorrect == true ? 1 : 0,
+        durationMs: durationDelta,
+        bumpStreak: firstAnswer,
       );
       // 模块统计也要实时累计：原来只写在 finalizeSession 里，
       // 用户做了几十题但没交卷（直接退出、或点了别的练习把旧会话挤掉），
       // 统计页的「各模块正确率」「最该补的模块」会一直是空的，
       // 而「今日已答」却有数字，看起来像数据对不上。
-      if (module != null && module.isNotEmpty) {
+      if (module != null && module.isNotEmpty && (shouldCount || countedBefore)) {
         await _accumulateModuleStats(
           module: module,
-          answered: 1,
-          correct: isCorrect == true ? 1 : 0,
-          durationMs: durationMs,
+          answered: shouldCount ? 1 : 0,
+          correct: shouldCount && isCorrect == true ? 1 : 0,
+          durationMs: durationDelta,
         );
       }
     }
     // 答错的题立刻进错题本，不必等到交卷。
+    //
     // 练习页每道题提交后就已经判分并显示“回答错误”，但错题本只在
     // finalizeSession 里写：用户做了十几题、错了好几道，直接退出，
     // 或者点「随机 20 题」把旧会话挤成 abandoned，这些错题就永远
     // 进不了错题本（首页还写着“答错的题会自动进入错题本”）。
-    // 只在“真正作答了”的首次提交里写：翻题/标记不确定/退出前自动保存
-    // 都是 submitted=false 或已有记录，不会把白卷当成错题。
+    //
+    // 注意判定条件不能用 firstAnswer（= 第一次选中选项）：
+    // 模考里选 B（未判分）→ 改成 C（判分后仍是 submitted=false）时，
+    // firstAnswer 已经是 false，这道错题会彻底漏掉。改成“第一次拿到
+    // 明确判错的结论”：翻题/标不确定/退出前保存的 isCorrect 是 null，
+    // 不会把白卷或未判分的题写进错题本。
     // 已交卷的会话由 finalizeSession 统一处理，这里跳过以免重复计数。
-    if (firstSubmit &&
-        isCorrect == false &&
+    final firstWrongResult = isCorrect == false &&
+        existing?.isCorrect != false &&
         selected.isNotEmpty &&
         session != null &&
-        session.status == SessionStatus.active.value) {
+        session.status == SessionStatus.active.value;
+    if (firstWrongResult) {
       await _updateReview(
         questionId: questionId,
         isCorrect: false,
