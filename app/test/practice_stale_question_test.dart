@@ -3,6 +3,7 @@
 // 而外层 PopScope 是 canPop: false —— 用户被关在死页面里，只能杀进程。
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kuangshuati/core/providers.dart';
@@ -56,7 +57,11 @@ void main() {
   setUp(() => database = AppDatabase.forTesting(NativeDatabase.memory()));
   tearDown(() => database.close());
 
-  Future<void> pumpPractice(WidgetTester tester) async {
+  Future<void> pumpPractice(
+    WidgetTester tester, {
+    String id = 'session-stale',
+    bool settle = true,
+  }) async {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -69,19 +74,24 @@ void main() {
             _PartialContentRepository([
               _question('ok-1'),
               _question('ok-2'),
+              _fiveOptionQuestion(),
             ]),
           ),
         ],
         child: MaterialApp(
           theme: buildAppTheme(),
-          home: const PracticePage(sessionId: 'session-stale'),
+          home: PracticePage(sessionId: id),
         ),
       ),
     );
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 300)),
     );
-    await tester.pumpAndSettle();
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      await tester.pump();
+    }
   }
 
   testWidgets('练习中遇到失效题：要有返回和交卷出口，不能是死页面', (tester) async {
@@ -149,4 +159,55 @@ void main() {
     final session = await database.sessionById('session-stale');
     expect(session?.status, SessionStatus.submitted.value);
   });
+
+  testWidgets('五个选项的题：桌面端按 5 也能选中', (tester) async {
+    await tester.runAsync(() async {
+      await database.createSession(
+        id: 'session-five',
+        mode: PracticeMode.random,
+        title: '五选项题',
+        questions: [_fiveOptionQuestion()],
+        revealMode: RevealMode.immediate,
+        requestedCount: 1,
+      );
+    });
+
+    await pumpPractice(tester, id: 'session-five');
+    expect(find.text('选项戊'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit5);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
+    await tester.pumpAndSettle();
+
+    // 选中的选项会落库；早先只绑定了 1-4，按 5 毫无反应。
+    final answers = await database.answersForSession('session-five');
+    expect(answers.single.selectedJson, '["E"]');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('练习记录读不出来时不是死页面，能返回首页', (tester) async {
+    // 会话根本不存在（被清空/恢复备份后残留的深链接）。
+    await pumpPractice(tester, id: 'session-missing', settle: false);
+    expect(find.textContaining('无法打开这次练习'), findsOneWidget);
+    expect(find.byType(AppBar), findsOneWidget, reason: '没有 AppBar 就没有返回入口');
+    expect(find.text('返回首页'), findsOneWidget);
+  });
 }
+
+QuestionContent _fiveOptionQuestion() => QuestionContent(
+  id: 'five-1',
+  paperId: 'paper-1',
+  questionNo: 1,
+  sequence: 1,
+  module: '常识判断',
+  stem: '五个选项的题',
+  options: const {'A': '选项甲', 'B': '选项乙', 'C': '选项丙', 'D': '选项丁', 'E': '选项戊'},
+  correctAnswers: const {'E'},
+  solution: '解析',
+  searchStem: null,
+  groupId: '',
+);

@@ -116,12 +116,42 @@ class _PracticePageState extends ConsumerState<PracticePage>
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (_error != null || _session == null || _rows.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('练习')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text('无法打开这次练习：${_error ?? '题目为空'}'),
+      // 以前这里只是一个居中的一行字：没有 AppBar、没有返回按钮，
+      // 而页面外层 PopScope 是 canPop: false。用户点开一组练习后如果
+      // 读取失败（题库损坏、记录被清空），就被关在死页里，只能杀进程。
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) async {
+          if (didPop) return;
+          _goBackHome();
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              tooltip: '返回',
+              onPressed: _goBackHome,
+              icon: const Icon(Icons.arrow_back),
+            ),
+            title: const Text('练习'),
+          ),
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '无法打开这次练习：${_error ?? '题目为空'}',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 18),
+                  FilledButton(
+                    onPressed: _goBackHome,
+                    child: const Text('返回首页'),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       );
@@ -248,13 +278,36 @@ class _PracticePageState extends ConsumerState<PracticePage>
         body: CallbackShortcuts(
           bindings: {
             // 桌面端/Web 键盘作答：数字选选项，回车提交/下一题，方向键翻题。
-            for (var i = 0; i < question.options.length && i < 4; i++)
+            // 1-4 覆盖不到五个选项的题（行测常识/言语里 5 选项并不罕见），
+            // 以前那类题在桌面端完全无法用键盘作答，只能去点鼠标。
+            for (var i = 0; i < question.options.length && i < 9; i++)
               SingleActivator(
                 [
                   LogicalKeyboardKey.digit1,
                   LogicalKeyboardKey.digit2,
                   LogicalKeyboardKey.digit3,
                   LogicalKeyboardKey.digit4,
+                  LogicalKeyboardKey.digit5,
+                  LogicalKeyboardKey.digit6,
+                  LogicalKeyboardKey.digit7,
+                  LogicalKeyboardKey.digit8,
+                  LogicalKeyboardKey.digit9,
+                ][i],
+              ): () =>
+                  _selectOption(question.options.keys.elementAt(i)),
+            // 数字小键盘上的 1-9 同样应该能选。
+            for (var i = 0; i < question.options.length && i < 9; i++)
+              SingleActivator(
+                [
+                  LogicalKeyboardKey.numpad1,
+                  LogicalKeyboardKey.numpad2,
+                  LogicalKeyboardKey.numpad3,
+                  LogicalKeyboardKey.numpad4,
+                  LogicalKeyboardKey.numpad5,
+                  LogicalKeyboardKey.numpad6,
+                  LogicalKeyboardKey.numpad7,
+                  LogicalKeyboardKey.numpad8,
+                  LogicalKeyboardKey.numpad9,
                 ][i],
               ): () =>
                   _selectOption(question.options.keys.elementAt(i)),
@@ -830,6 +883,15 @@ class _PracticePageState extends ConsumerState<PracticePage>
   /// 之前点返回键或左上角箭头会直接离开做题页：辛辛苦苦做了几十题，
   /// 误触一下心流就被打断，而且不知道进度到底还在不在。交卷有确认框，
   /// 退出却没有，行为不一致。这里统一补上确认，并明确告诉用户进度已保存。
+  /// 练习页出错时的唯一出口：回首页。
+  ///
+  /// 外层 PopScope 是 canPop: false，出错页以前只画一行字，
+  /// 用户既不能返回也不能后退，只能杀进程。
+  void _goBackHome() {
+    if (!mounted) return;
+    context.go('/home');
+  }
+
   Future<void> _confirmExit() async {
     final answered = _selected.values.where((value) => value.isNotEmpty).length;
     final leave = await showDialog<bool>(
