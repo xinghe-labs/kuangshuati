@@ -135,6 +135,37 @@ void main() {
     await _teardown(tester);
   });
 
+  testWidgets('在收藏列表里误点取消收藏，能靠提示里的「撤销」加回来', (tester) async {
+    final questions = [_question('u-1', '关于基层治理的说法，正确的是', 1)];
+    await tester.runAsync(() async {
+      await database.toggleFavorite('u-1');
+      await database.setFavoriteNote('u-1', '别丢我');
+    });
+
+    await _pumpBank(tester, database, questions);
+    await tester.tap(find.text('收藏'));
+    await _settle(tester, 300);
+    expect(_texts(tester).any((text) => text.contains('基层治理')), isTrue);
+
+    // 书签图标就在标题右侧，很容易误触。
+    await tester.tap(find.byTooltip('取消收藏'));
+    await _settle(tester, 300);
+    // SnackBar 有入场动画，动画期间外层是 IgnorePointer，必须等它稳定。
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(await database.isFavorite('u-1'), isFalse);
+    // 取消收藏后必须给提示，并带上撤销入口。
+    expect(_texts(tester).any((text) => text.contains('已取消收藏')), isTrue);
+    expect(find.text('撤销'), findsOneWidget);
+
+    await tester.tap(find.text('撤销'));
+    await _settle(tester, 300);
+    expect(await database.isFavorite('u-1'), isTrue);
+    // 笔记不能跟着丢。
+    expect(await database.favoriteNote('u-1'), '别丢我');
+
+    await _teardown(tester);
+  });
+
   testWidgets('删除笔记前会先确认，取消后笔记仍然在', (tester) async {
     final questions = [_question('n-1', '关于基层治理的说法，正确的是', 1)];
     await tester.runAsync(() async {
