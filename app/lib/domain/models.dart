@@ -163,6 +163,7 @@ class SessionSummary {
     required this.totalCount,
     required this.answeredCount,
     required this.correctCount,
+    this.gradedCount,
   });
 
   static const empty = SessionSummary(
@@ -175,6 +176,16 @@ class SessionSummary {
   final int answeredCount;
   final int correctCount;
 
+  /// 真正判过分的题数。
+  ///
+  /// 没交卷就被结束的练习里，答案只是“选了选项”（`isCorrect` 为 null），
+  /// 不能算作答对也不能算答错。早先列表用 [correctCount] / [answeredCount]
+  /// 直接算正确率，一场做了 2 题、没交卷的模考会显示「正确率 0%」，
+  /// 实际上用户当时根本还没看到对错。
+  final int? gradedCount;
+
+  int get _graded => gradedCount ?? answeredCount;
+
   int get scorePercent =>
-      answeredCount == 0 ? 0 : (correctCount * 100 / answeredCount).round();
+      _graded == 0 ? 0 : (correctCount * 100 / _graded).round();
 }

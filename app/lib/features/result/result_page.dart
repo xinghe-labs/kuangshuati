@@ -81,10 +81,26 @@ class _ResultPageState extends ConsumerState<ResultPage> {
         .length;
     // 开发文档 §11.1 / §11.2：练习看“正确率”（分母只算已作答题），
     // 模考看“得分率”（分母是整卷题数，未答按零分）。
+    //
+    // 没交卷就被结束的练习里，`isCorrect` 为 null（选了选项但从未判分）：
+    // 它既不算对也不算错，不能当分母，否则「做了 2 题、没交卷」
+    // 会在历史记录/结果页里显示成 0% 正确率。
+    final gradedCount = _rows
+        .where((row) => _answers[row.questionId]?.isCorrect != null)
+        .length;
+    // 已交卷的练习里，选了选项却没判分的题属于「题库更新后失效」，
+    // 它仍应留在分母里（用户当时确实答了），失效题不该让正确率凭空升高。
+    // 只有整场都没交卷时，答案才是完全没判过分，分母为 0、显示占位符。
     final isMock = session.mode == domain.PracticeMode.mock.name;
-    final ratioBase = isMock ? _rows.length : answeredCount;
+    final ungradedSession =
+        session.status == domain.SessionStatus.abandoned.value;
+    final ratioBase = isMock
+        ? _rows.length
+        : (ungradedSession ? gradedCount : answeredCount);
     final score = ratioBase == 0 ? 0.0 : correctCount / ratioBase;
-    final visible = _wrongOnly
+    // 没交卷的练习不区分对错（根本没判分），「仅看错题」也就没有意义：
+    // 早先它会列出所有选了选项的题，全部标成“错误”。
+    final visible = _wrongOnly && !ungradedSession
         ? details.where((item) => item.answer?.isCorrect != true).toList()
         : details;
     // 只有「答了题又标了不确定」的题会进明天的复习计划；
@@ -142,6 +158,37 @@ class _ResultPageState extends ConsumerState<ResultPage> {
             ),
             const SizedBox(height: 10),
           ],
+          if (session.status == domain.SessionStatus.abandoned.value) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              color: AppColors.softFill,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: AppColors.muted,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      // 中途退出没交卷的练习：答案只是“选了选项”，
+                      // 从未判分。不说明的话，下面逐题回顾会全部标成
+                      // 红色“你的答案”，看起来像全错。
+                      '这组练习没有交卷，下面的答案没有判分，不计入正确率和错题本。',
+                      style: TextStyle(
+                        color: AppColors.ink,
+                        fontSize: 12,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           Container(
             padding: const EdgeInsets.all(20),
             color: AppColors.ink,
@@ -160,7 +207,10 @@ class _ResultPageState extends ConsumerState<ResultPage> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '${(score * 100).round()}',
+                      // 没交卷就被结束的练习里一道题都没判过分：
+                      // 写“0% 正确率”会让用户以为自己全错，实际上
+                      // 他根本没看到过对错。
+                      ratioBase == 0 ? '--' : '${(score * 100).round()}',
                       style: TextStyle(
                         color: AppColors.onInk,
                         fontSize: 52,
@@ -169,7 +219,9 @@ class _ResultPageState extends ConsumerState<ResultPage> {
                       ),
                     ),
                     Text(
-                      isMock ? '% 得分率' : '% 正确率',
+                      ratioBase == 0
+                          ? (isMock ? '% 得分率' : '% 正确率（未判分）')
+                          : (isMock ? '% 得分率' : '% 正确率'),
                       style: TextStyle(
                         color: AppColors.onInkMuted,
                         fontSize: 12,
@@ -377,7 +429,24 @@ class _ResultQuestion extends StatelessWidget {
   Widget build(BuildContext context) {
     final selected = answer?.selected ?? {};
     final blank = selected.isEmpty;
+    // 选了选项但 isCorrect 为 null：这组练习没交卷，答案从未判分。
+    // 早先它和“答错”共用红色，用户回看时以为全错。
+    final ungraded = !blank && answer?.isCorrect == null;
     final correct = answer?.isCorrect == true;
+    final tone = blank
+        ? AppColors.muted
+        : ungraded
+        ? AppColors.muted
+        : correct
+        ? AppColors.positive
+        : AppColors.negative;
+    final fill = blank
+        ? AppColors.softFill
+        : ungraded
+        ? AppColors.softFill
+        : correct
+        ? AppColors.positiveFill
+        : AppColors.negativeFill;
     return Container(
       color: AppColors.surface,
       child: ExpansionTile(
@@ -389,19 +458,11 @@ class _ResultQuestion extends StatelessWidget {
           width: 30,
           height: 30,
           alignment: Alignment.center,
-          color: blank
-              ? AppColors.softFill
-              : correct
-              ? AppColors.positiveFill
-              : AppColors.negativeFill,
+          color: fill,
           child: Text(
             '$number',
             style: TextStyle(
-              color: blank
-                  ? AppColors.muted
-                  : correct
-                  ? AppColors.positive
-                  : AppColors.negative,
+              color: tone,
               fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
@@ -418,13 +479,11 @@ class _ResultQuestion extends StatelessWidget {
           child: Text(
             blank
                 ? '未作答 · $module'
+                : ungraded
+                ? '未判分 · 你的答案 ${selected.join('、')} · $module'
                 : '${correct ? '正确' : '错误'} · 你的答案 ${selected.join('、')} · $module',
             style: TextStyle(
-              color: blank
-                  ? AppColors.muted
-                  : correct
-                  ? AppColors.positive
-                  : AppColors.negative,
+              color: tone,
               fontSize: 11,
             ),
           ),
@@ -463,6 +522,7 @@ class _ResultQuestion extends StatelessWidget {
                 text: entry.value,
                 chosen: selected.contains(entry.key),
                 isCorrect: question.correctAnswers.contains(entry.key),
+                ungraded: ungraded,
               ),
               const SizedBox(height: 6),
             ],
@@ -499,12 +559,16 @@ class _ResultOption extends StatelessWidget {
     required this.text,
     required this.chosen,
     required this.isCorrect,
+    this.ungraded = false,
   });
 
   final String letter;
   final String text;
   final bool chosen;
   final bool isCorrect;
+
+  /// 这组练习没交卷，答案从未判分：不能把用户选的选项标成“错误”。
+  final bool ungraded;
 
   @override
   Widget build(BuildContext context) {
@@ -515,17 +579,17 @@ class _ResultOption extends StatelessWidget {
         normalized.isEmpty || normalized.toUpperCase() == letter.toUpperCase();
     final background = isCorrect
         ? AppColors.positiveFill
-        : chosen
+        : chosen && !ungraded
         ? AppColors.negativeFill
         : AppColors.surface;
     final border = isCorrect
         ? AppColors.positive
-        : chosen
+        : chosen && !ungraded
         ? AppColors.negative
         : AppColors.line;
     final label = isCorrect
         ? '正确答案'
-        : chosen
+        : chosen && !ungraded
         ? '你的选择'
         : null;
     return Container(
