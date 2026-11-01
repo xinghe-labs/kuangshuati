@@ -87,8 +87,16 @@ class _ResultPageState extends ConsumerState<ResultPage> {
     final visible = _wrongOnly
         ? details.where((item) => item.answer?.isCorrect != true).toList()
         : details;
+    // 只有「答了题又标了不确定」的题会进明天的复习计划；
+    // 只标不确定、根本没作答的题不会（交卷时未作答只记一次“空”，
+    // 不会进错题本）。这里必须按同一口径统计，否则页面会写
+    // “本次有 2 道题被标记不确定，已加入明天的复习计划”，而实际只进了 1 道。
     final uncertainCount = details
-        .where((item) => item.answer?.uncertain == true)
+        .where(
+          (item) =>
+              item.answer?.uncertain == true &&
+              (item.answer?.selected.isNotEmpty ?? false),
+        )
         .length;
 
     return Scaffold(
