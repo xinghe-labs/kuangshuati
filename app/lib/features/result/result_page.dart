@@ -165,11 +165,7 @@ class _ResultPageState extends ConsumerState<ResultPage> {
               color: AppColors.softFill,
               child: Row(
                 children: [
-                  Icon(
-                    Icons.info_outline,
-                    size: 16,
-                    color: AppColors.muted,
-                  ),
+                  Icon(Icons.info_outline, size: 16, color: AppColors.muted),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -239,7 +235,10 @@ class _ResultPageState extends ConsumerState<ResultPage> {
                       ),
                     ),
                     Expanded(
-                      child: _ResultMetric(label: '已答', value: '$answeredCount'),
+                      child: _ResultMetric(
+                        label: '已答',
+                        value: '$answeredCount',
+                      ),
                     ),
                     Expanded(
                       child: _ResultMetric(label: '答对', value: '$correctCount'),
@@ -314,7 +313,8 @@ class _ResultPageState extends ConsumerState<ResultPage> {
             details.isEmpty
                 ? const AppEmptyState(
                     title: '题目已随题库更新失效',
-                    message: '这次练习的题目在新题库里都找不到了，无法展示逐题回顾。'
+                    message:
+                        '这次练习的题目在新题库里都找不到了，无法展示逐题回顾。'
                         '上面的正确率仍按你当时的作答计算。',
                   )
                 : const AppEmptyState(title: '没有错题', message: '这次练习全部答对。')
@@ -482,10 +482,7 @@ class _ResultQuestion extends StatelessWidget {
                 : ungraded
                 ? '未判分 · 你的答案 ${selected.join('、')} · $module'
                 : '${correct ? '正确' : '错误'} · 你的答案 ${selected.join('、')} · $module',
-            style: TextStyle(
-              color: tone,
-              fontSize: 11,
-            ),
+            style: TextStyle(color: tone, fontSize: 11),
           ),
         ),
         children: [

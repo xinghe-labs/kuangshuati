@@ -55,10 +55,8 @@ class _RecentSessions extends ConsumerWidget {
     final state = ref.watch(recentSessionsProvider);
     return state.when(
       loading: () => const LinearProgressIndicator(minHeight: 2),
-      error: (error, stack) => Text(
-        '读取练习记录失败：$error',
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
+      error: (error, stack) =>
+          Text('读取练习记录失败：$error', style: Theme.of(context).textTheme.bodySmall),
       data: (rows) {
         if (rows.isEmpty) {
           return const AppEmptyState(
@@ -108,9 +106,7 @@ class _RecentSessions extends ConsumerWidget {
   /// 没判分的题既不算对也不算错，不能拿来当分母。
   int _ratePercent(RecentSessionEntry row) {
     final graded = row.summary.gradedCount ?? row.summary.answeredCount;
-    final base = row.session.mode == 'mock'
-        ? row.summary.totalCount
-        : graded;
+    final base = row.session.mode == 'mock' ? row.summary.totalCount : graded;
     if (base == 0) return 0;
     return (row.summary.correctCount * 100 / base).round();
   }
@@ -463,16 +459,23 @@ class _ModuleRow extends StatelessWidget {
           const SizedBox(height: 7),
           Row(
             children: [
-              Text(
-                '${module.correctCount} / ${module.answeredCount} 题',
-                style: Theme.of(context).textTheme.bodySmall,
+              Expanded(
+                child: Text(
+                  '${module.correctCount} / ${module.answeredCount} 题',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
-              const Spacer(),
-              Text(
-                enough
-                    ? '${(module.durationMs / 60000).round()} 分钟'
-                    : '再做 ${kWeakModuleMinAnswered - module.answeredCount} 题后看正确率',
-                style: Theme.of(context).textTheme.bodySmall,
+              const SizedBox(width: 8),
+              // 右侧那句「再做 N 题后看正确率」很长，早先和左边
+              // 用 Spacer 硬挤一行，320 宽 + 字号 1.3 就向右溢出 25px。
+              Flexible(
+                child: Text(
+                  enough
+                      ? '${(module.durationMs / 60000).round()} 分钟'
+                      : '再做 ${kWeakModuleMinAnswered - module.answeredCount} 题后看正确率',
+                  textAlign: TextAlign.right,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
             ],
           ),
