@@ -878,11 +878,6 @@ class _PracticePageState extends ConsumerState<PracticePage>
     );
   }
 
-  /// 退出练习前的确认。
-  ///
-  /// 之前点返回键或左上角箭头会直接离开做题页：辛辛苦苦做了几十题，
-  /// 误触一下心流就被打断，而且不知道进度到底还在不在。交卷有确认框，
-  /// 退出却没有，行为不一致。这里统一补上确认，并明确告诉用户进度已保存。
   /// 练习页出错时的唯一出口：回首页。
   ///
   /// 外层 PopScope 是 canPop: false，出错页以前只画一行字，
@@ -892,6 +887,11 @@ class _PracticePageState extends ConsumerState<PracticePage>
     context.go('/home');
   }
 
+  /// 退出练习前的确认。
+  ///
+  /// 之前点返回键或左上角箭头会直接离开做题页：辛辛苦苦做了几十题，
+  /// 误触一下心流就被打断，而且不知道进度到底还在不在。交卷有确认框，
+  /// 退出却没有，行为不一致。这里统一补上确认，并明确告诉用户进度已保存。
   Future<void> _confirmExit() async {
     final answered = _selected.values.where((value) => value.isNotEmpty).length;
     final leave = await showDialog<bool>(
