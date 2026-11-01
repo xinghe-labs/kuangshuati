@@ -133,6 +133,30 @@ class _WrongPageState extends ConsumerState<WrongPage> {
                               item.nextReviewAt! <= now),
                     )
                     .map((item) => item.questionId);
+                // 「未到期」必须只数还没掌握、且题目还能打开的记录。
+                // 原来直接用 `filtered.length - dueQuestions.length`，切到「全部」后
+                // 已掌握的题（和题库里已失效的记录）都会被算成「未到期」：
+                // 实测 1 道已掌握 + 2 道未到期会显示成「0 道到期，3 道未到期」。
+                final pending = filtered.where(
+                  (item) =>
+                      questions.containsKey(item.questionId) && !item.mastered,
+                );
+                final futureCount = pending.where((item) {
+                  final next = item.nextReviewAt;
+                  return next != null && next > now;
+                }).length;
+                final masteredCount = filtered
+                    .where((item) => item.mastered)
+                    .length;
+                final missingCount = filtered
+                    .where((item) => !questions.containsKey(item.questionId))
+                    .length;
+                final summaryParts = [
+                  '${dueQuestions.length} 道到期',
+                  '$futureCount 道未到期',
+                  if (masteredCount > 0) '$masteredCount 道已掌握',
+                  if (missingCount > 0) '$missingCount 道已失效',
+                ];
                 return Column(
                   children: [
                     if (filter != _WrongFilter.mastered)
@@ -143,8 +167,7 @@ class _WrongPageState extends ConsumerState<WrongPage> {
                           children: [
                             Expanded(
                               child: Text(
-                                '${dueQuestions.length} 道到期，'
-                                '${filtered.length - dueQuestions.length} 道未到期',
+                                summaryParts.join('，'),
                                 style: TextStyle(
                                   color: AppColors.onInk,
                                   fontSize: 13,

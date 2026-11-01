@@ -52,6 +52,12 @@ class SessionAnswers extends Table {
   IntColumn get durationMs => integer().withDefault(const Constant(0))();
   IntColumn get answeredAt => integer().nullable()();
 
+  /// 这道题是否已经在提交那一刻实时计入过「模块统计」。
+  /// 练习模式（答完立刻出答案）在 saveAnswer 里就累计了模块，
+  /// 交卷时必须跳过它，否则同一题会被算两次；
+  /// 模考/交卷后统一判分的题在交卷时才算，标记后同样不会重复。
+  BoolColumn get moduleCounted => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column<Object>> get primaryKey => {sessionId, questionId};
 }
@@ -142,7 +148,7 @@ class AppDatabase extends _$AppDatabase {
   DateTime _now() => (_clock ?? DateTime.now)();
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -164,6 +170,11 @@ class AppDatabase extends _$AppDatabase {
         // 收藏/笔记分离：旧行都是真收藏，默认 favorited=true 即可，
         // 不清理任何用户数据。
         await migrator.addColumn(favorites, favorites.favorited);
+      }
+      if (from < 5) {
+        // 模块统计改成“提交即累计”，需要记住哪些题已经计过，
+        // 避免交卷时重复累加。旧数据都是交卷时算的，保持默认 false。
+        await migrator.addColumn(sessionAnswers, sessionAnswers.moduleCounted);
       }
     },
     onCreate: (migrator) async {
@@ -530,6 +541,7 @@ class AppDatabase extends _$AppDatabase {
     required bool? isCorrect,
     required int durationMs,
     bool uncertain = false,
+    String? module,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final existing =
@@ -549,21 +561,80 @@ class AppDatabase extends _$AppDatabase {
         uncertain: Value(uncertain),
         durationMs: Value(durationMs),
         answeredAt: Value(now),
+        // 只有真正提交的答案才可能在这一步计入模块统计。
+        moduleCounted: Value(
+          submitted && module != null && module.isNotEmpty,
+        ),
       ),
     );
+    final session = await sessionById(sessionId);
     await (update(practiceSessions)..where((row) => row.id.equals(sessionId)))
         .write(PracticeSessionsCompanion(updatedAt: Value(now)));
     // 首次提交时实时计入“今日已答”，不用等交卷：
     // 练习中退出后再看统计，当天数字不再归零。
     // 后续重存（翻题、标记不确定、退出前保存）不重复计数。
-    if (submitted && (existing == null || !existing.submitted)) {
+    final firstSubmit = submitted && (existing == null || !existing.submitted);
+    if (firstSubmit) {
       await _accumulateDailyStats(
         answered: 1,
         correct: isCorrect == true ? 1 : 0,
         durationMs: durationMs,
         bumpStreak: true,
       );
+      // 模块统计也要实时累计：原来只写在 finalizeSession 里，
+      // 用户做了几十题但没交卷（直接退出、或点了别的练习把旧会话挤掉），
+      // 统计页的「各模块正确率」「最该补的模块」会一直是空的，
+      // 而「今日已答」却有数字，看起来像数据对不上。
+      if (module != null && module.isNotEmpty) {
+        await _accumulateModuleStats(
+          module: module,
+          answered: 1,
+          correct: isCorrect == true ? 1 : 0,
+          durationMs: durationMs,
+        );
+      }
     }
+    // 答错的题立刻进错题本，不必等到交卷。
+    // 练习页每道题提交后就已经判分并显示“回答错误”，但错题本只在
+    // finalizeSession 里写：用户做了十几题、错了好几道，直接退出，
+    // 或者点「随机 20 题」把旧会话挤成 abandoned，这些错题就永远
+    // 进不了错题本（首页还写着“答错的题会自动进入错题本”）。
+    // 只在“真正作答了”的首次提交里写：翻题/标记不确定/退出前自动保存
+    // 都是 submitted=false 或已有记录，不会把白卷当成错题。
+    // 已交卷的会话由 finalizeSession 统一处理，这里跳过以免重复计数。
+    if (firstSubmit &&
+        isCorrect == false &&
+        selected.isNotEmpty &&
+        session != null &&
+        session.status == SessionStatus.active.value) {
+      await _updateReview(
+        questionId: questionId,
+        isCorrect: false,
+        uncertain: uncertain,
+        now: DateTime.fromMillisecondsSinceEpoch(now),
+      );
+    }
+  }
+
+  Future<void> _accumulateModuleStats({
+    required String module,
+    required int answered,
+    required int correct,
+    required int durationMs,
+  }) async {
+    if (answered == 0 && correct == 0 && durationMs == 0) return;
+    final existing = await (select(
+      moduleStats,
+    )..where((row) => row.module.equals(module))).getSingleOrNull();
+    await into(moduleStats).insertOnConflictUpdate(
+      ModuleStatsCompanion.insert(
+        module: module,
+        answeredCount: Value((existing?.answeredCount ?? 0) + answered),
+        correctCount: Value((existing?.correctCount ?? 0) + correct),
+        durationMs: Value((existing?.durationMs ?? 0) + durationMs),
+        updatedAt: _now().millisecondsSinceEpoch,
+      ),
+    );
   }
 
   /// 把一份答题增量并入当日统计；需要时推进连续天数。
@@ -668,8 +739,12 @@ class AppDatabase extends _$AppDatabase {
           await _recordBlank(questionId: row.questionId, now: now);
           continue;
         }
+        // 练习中“立即出答案”的模式下，答错的那一题在 saveAnswer 时
+        // 就已经写进错题本了（见 saveAnswer）。这里再写一次会把
+        // “错 N 次”翻倍，所以跳过；答对/不确定仍由这里处理。
+        if (alreadySubmitted && !isCorrect) continue;
         await _updateReview(
-          question: question,
+          questionId: row.questionId,
           isCorrect: isCorrect,
           uncertain: answer?.uncertain ?? false,
           now: now,
@@ -697,6 +772,10 @@ class AppDatabase extends _$AppDatabase {
         if (question == null) continue;
         final answer = answerByQuestion[row.questionId];
         final selected = _decodeSelected(answer?.selectedJson);
+        // 已经在 saveAnswer 里实时计过模块统计的题不能在这里重复累加：
+        // 「答完立即出答案」模式下，保存答案时就把这道题连同模块算进去了。
+        // 这里只补“交卷时才第一次判分”的题（模考 / 关闭立即出答案）。
+        if (answer?.moduleCounted == true) continue;
         final total = moduleTotals.putIfAbsent(
           question.module,
           _ModuleTotal.new,
@@ -708,24 +787,18 @@ class AppDatabase extends _$AppDatabase {
         total.durationMs += answer?.durationMs ?? 0;
       }
       for (final entry in moduleTotals.entries) {
-        final existing = await (select(
-          moduleStats,
-        )..where((row) => row.module.equals(entry.key))).getSingleOrNull();
-        await into(moduleStats).insertOnConflictUpdate(
-          ModuleStatsCompanion.insert(
-            module: entry.key,
-            answeredCount: Value(
-              (existing?.answeredCount ?? 0) + entry.value.answered,
-            ),
-            correctCount: Value(
-              (existing?.correctCount ?? 0) + entry.value.correct,
-            ),
-            durationMs: Value(
-              (existing?.durationMs ?? 0) + entry.value.durationMs,
-            ),
-            updatedAt: nowMs,
-          ),
+        await _accumulateModuleStats(
+          module: entry.key,
+          answered: entry.value.answered,
+          correct: entry.value.correct,
+          durationMs: entry.value.durationMs,
         );
+      }
+      // 标记为已计入模块统计，避免重复交卷或其他路径再累加一次。
+      if (moduleTotals.isNotEmpty) {
+        await (update(sessionAnswers)
+              ..where((row) => row.sessionId.equals(sessionId)))
+            .write(const SessionAnswersCompanion(moduleCounted: Value(true)));
       }
 
       await (update(
@@ -789,14 +862,14 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<void> _updateReview({
-    required QuestionContent question,
+    required String questionId,
     required bool isCorrect,
     required bool uncertain,
     required DateTime now,
   }) async {
     final existing = await (select(
       reviewItems,
-    )..where((row) => row.questionId.equals(question.id))).getSingleOrNull();
+    )..where((row) => row.questionId.equals(questionId))).getSingleOrNull();
     // 答对且从未进过错题本：不需要复习；
     // 但标记过“不确定”的答对题要进一次复习（明天到期），
     // 否则用户的不确定标记在交卷后彻底消失。
@@ -804,7 +877,7 @@ class AppDatabase extends _$AppDatabase {
       if (!uncertain) return;
       await into(reviewItems).insert(
         ReviewItemsCompanion.insert(
-          questionId: question.id,
+          questionId: questionId,
           source: const Value('uncertain'),
           stage: const Value(0),
           nextReviewAt: Value(
@@ -828,7 +901,7 @@ class AppDatabase extends _$AppDatabase {
     final intervalDays = const [1, 3, 7, 15, 30][nextStage];
     await into(reviewItems).insertOnConflictUpdate(
       ReviewItemsCompanion.insert(
-        questionId: question.id,
+        questionId: questionId,
         source: Value(existing?.source ?? 'practice'),
         wrongCount: Value((existing?.wrongCount ?? 0) + (isCorrect ? 0 : 1)),
         blankCount: Value(existing?.blankCount ?? 0),
