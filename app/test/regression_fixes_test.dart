@@ -213,6 +213,7 @@ void main() {
     // _runStartedAt / _questionStartedAt。用户回微信 10 分钟，这 10 分钟
     // 全部算进本组用时和当前题用时，再经 finalizeSession 累加进
     // dailyStats / moduleStats，统计页“模块表现”的分钟数整片虚高。
+    const backgroundPauseMs = 1500;
     final stubQuestions = [
       for (final question in questions.take(2)) question,
     ];
@@ -226,6 +227,10 @@ void main() {
       );
     });
 
+    // 秒表从「页面开始加载」就起算：加载完成前的 runAsync 等待同样是
+    // 前台时间，练习页的 _runStartedAt 也是在加载完成后才锚定的，两者
+    // 起点一致，才能用同一个量级比较。
+    final foregroundWatch = Stopwatch()..start();
     await tester.pumpWidget(
       MaterialApp(
         theme: buildAppTheme(),
@@ -249,9 +254,10 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump();
+    final beforeBackgroundMs = foregroundWatch.elapsedMilliseconds;
     // 后台待 1500ms
     await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 1500)),
+      () => Future<void>.delayed(const Duration(milliseconds: backgroundPauseMs)),
     );
     await tester.pump();
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
@@ -264,16 +270,23 @@ void main() {
       () => Future<void>.delayed(const Duration(milliseconds: 250)),
     );
     await tester.pump();
+    foregroundWatch.stop();
 
+    // 页面在加载完成后才把 _runStartedAt 锚到现在，所以“真正会被计入”
+    // 的前台时间 ≤ 秒表读数减去后台那一段。
+    final countedForegroundMs =
+        foregroundWatch.elapsedMilliseconds - backgroundPauseMs;
     final answers = await database.answersForSession('s-bg');
     final total = answers.fold<int>(0, (sum, a) => sum + a.durationMs);
-    // 后台停了 1500ms。修复后这段时间应完全不计（实测冻结在 ~1.3s，
-    // 即进入后台前真正做答的那一段）；未修复时它会被完整算进去
-    // （实测 total≈2.8s）。阈值取 2000ms，稳稳夹在两者中间。
+    // 后台那 1500ms 必须完全不计；未修复时 total 会多出整整 1500ms
+    // （实测未修复时 total ≈ 前台 + 1500）。
     expect(
       total,
-      lessThan(2000),
-      reason: '后台 1.5 秒被算进了做题用时（total=$total）',
+      lessThanOrEqualTo(countedForegroundMs + 300),
+      reason:
+          '后台 $backgroundPauseMs 毫秒被算进了做题用时'
+          '（total=$total，前台实测 $countedForegroundMs 毫秒，'
+          '进后台前已过 $beforeBackgroundMs 毫秒）',
     );
 
     // 收尾：让页面真正 dispose（会取消 1s 定时器），再把残留的
