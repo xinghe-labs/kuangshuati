@@ -192,7 +192,13 @@ class _WrongPageState extends ConsumerState<WrongPage> {
   }
 
   Future<void> _start(Iterable<String> ids) async {
-    final questions = await questionsFromIds(ref, ids);
+    final List<QuestionContent> questions;
+    try {
+      questions = await questionsFromIds(ref, ids);
+    } on Object catch (error) {
+      if (mounted) showContentError(context, error);
+      return;
+    }
     if (!mounted) return;
     await launchPractice(
       context,

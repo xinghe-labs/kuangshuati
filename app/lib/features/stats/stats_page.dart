@@ -310,9 +310,16 @@ class StatsPage extends ConsumerWidget {
     String module,
   ) async {
     // 弱项入口与首页一致：一组默认 20 题（requirements-discovery Q18/Q19）。
-    final questions = await ref
-        .read(contentRepositoryProvider)
-        .randomQuestions(kDefaultPracticeCount, module: module);
+    final List<QuestionContent> questions;
+    try {
+      questions = await ref
+          .read(contentRepositoryProvider)
+          .randomQuestions(kDefaultPracticeCount, module: module);
+    } on Object catch (error) {
+      // 题库读取失败时以前什么都不做，用户点「练这个模块」没反应。
+      if (context.mounted) showContentError(context, error);
+      return;
+    }
     if (!context.mounted) return;
     await launchPractice(
       context,
