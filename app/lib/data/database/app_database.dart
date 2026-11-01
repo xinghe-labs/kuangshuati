@@ -284,6 +284,19 @@ class AppDatabase extends _$AppDatabase {
         .map((row) => row.read(count) ?? 0);
   }
 
+  /// 一次性读取已提交题目数（弹「结束旧练习？」确认时用）。
+  Future<int> submittedCountFor(String sessionId) async {
+    final count = sessionAnswers.questionId.count();
+    final row = await (selectOnly(sessionAnswers)
+          ..addColumns([count])
+          ..where(
+            sessionAnswers.sessionId.equals(sessionId) &
+                sessionAnswers.submitted.equals(true),
+          ))
+        .getSingle();
+    return row.read(count) ?? 0;
+  }
+
   Future<List<ReviewItem>> allReviewItems() {
     return (select(reviewItems)..orderBy([
           (row) => OrderingTerm.asc(row.mastered),
@@ -304,6 +317,43 @@ class AppDatabase extends _$AppDatabase {
     return (select(
       dailyStats,
     )..orderBy([(row) => OrderingTerm.desc(row.day)])).watch();
+  }
+
+  /// 最近完成（已交卷/已结束）的练习记录。
+  ///
+  /// 以前只有结果页能看成绩：一离开结果页，sessionId 就再也拿不到，
+  /// 用户想回看「昨天那组模考多少分」完全无处可去。
+  Stream<List<PracticeSession>> watchRecentSessions({int limit = 20}) {
+    return (select(practiceSessions)
+          ..where(
+            (row) =>
+                row.status.equals(SessionStatus.submitted.value) |
+                row.status.equals(SessionStatus.abandoned.value),
+          )
+          ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])
+          ..limit(limit))
+        .watch();
+  }
+
+  /// 某次练习的作答概况（回看历史成绩用）。
+  Future<SessionSummary> summarizeSession(String sessionId) async {
+    final rows = await sessionQuestionRows(sessionId);
+    final answers = await answersForSession(sessionId);
+    final byQuestion = {for (final answer in answers) answer.questionId: answer};
+    var answered = 0;
+    var correct = 0;
+    for (final row in rows) {
+      final answer = byQuestion[row.questionId];
+      final selected = _decodeSelected(answer?.selectedJson);
+      if (selected.isEmpty) continue;
+      answered++;
+      if (answer?.isCorrect == true) correct++;
+    }
+    return SessionSummary(
+      totalCount: rows.length,
+      answeredCount: answered,
+      correctCount: correct,
+    );
   }
 
   /// 连续练习天数与总练习天数（开发文档 §11.3）。

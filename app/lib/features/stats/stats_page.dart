@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
 import '../../core/router.dart';
@@ -9,12 +10,12 @@ import '../../domain/models.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../practice/practice_launcher.dart';
 
+/// 一组练习的默认题量（requirements-discovery Q18：默认 20 题）。
+const int kDefaultPracticeCount = 20;
+
 /// 「模块弱项」的最小样本量（开发文档 §11.1）：已作答不足 10 道的模块只标“数据较少”，
 /// 不参与弱项评选，避免“3 题错 1 题”被当成薄弱模块。
 const int kWeakModuleMinAnswered = 10;
-
-/// 一组练习的默认题量（requirements-discovery Q18：默认 20 题）。
-const int kDefaultPracticeCount = 20;
 
 /// 选出最需要补强的模块（开发文档 §11.1）。
 ///
@@ -42,6 +43,89 @@ ModuleStat? weakestModule(List<ModuleStat> modules) {
 }
 
 /// 错题本状态卡：复习中/今日到期/已掌握，到期时点击直达错题页。
+/// 最近练习列表：交卷/结束后仍然可以回看每一次的成绩。
+///
+/// 以前成绩只存在结果页，一按「返回首页」就再也找不到那组练习，
+/// 统计页也只有“今天做了 1 组”这种聚合数字。
+class _RecentSessions extends ConsumerWidget {
+  const _RecentSessions();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FutureBuilder<List<_SessionRow>>(
+      future: _load(ref),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const LinearProgressIndicator(minHeight: 2);
+        }
+        if (snapshot.hasError) {
+          return Text(
+            '读取练习记录失败：${snapshot.error}',
+            style: Theme.of(context).textTheme.bodySmall,
+          );
+        }
+        final rows = snapshot.data ?? const <_SessionRow>[];
+        if (rows.isEmpty) {
+          return const AppEmptyState(
+            title: '还没有已完成的练习',
+            message: '交卷后这里会保留每一组的成绩，随时可以回看。',
+          );
+        }
+        return HairlineList(
+          children: [
+            for (final row in rows)
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 5,
+                ),
+                title: Text(row.session.title),
+                subtitle: Text(
+                  '${_formatDay(row.session.updatedAt)} · '
+                  '${row.summary.answeredCount}/${row.summary.totalCount} 题 · '
+                  '正确率 ${row.summary.scorePercent}%',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                trailing: const Icon(Icons.arrow_forward, size: 17),
+                onTap: () =>
+                    context.push('/result/${row.session.id}'),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<List<_SessionRow>> _load(WidgetRef ref) async {
+    final database = ref.read(databaseProvider);
+    final sessions = await database.watchRecentSessions(limit: 20).first;
+    final rows = <_SessionRow>[];
+    for (final session in sessions) {
+      rows.add(
+        _SessionRow(
+          session: session,
+          summary: await database.summarizeSession(session.id),
+        ),
+      );
+    }
+    return rows;
+  }
+
+  String _formatDay(int millis) {
+    final time = DateTime.fromMillisecondsSinceEpoch(millis);
+    final month = time.month.toString().padLeft(2, '0');
+    final day = time.day.toString().padLeft(2, '0');
+    return '${time.year}-$month-$day';
+  }
+}
+
+class _SessionRow {
+  const _SessionRow({required this.session, required this.summary});
+
+  final PracticeSession session;
+  final SessionSummary summary;
+}
+
 class _ReviewCard extends ConsumerWidget {
   const _ReviewCard();
 
@@ -205,6 +289,9 @@ class StatsPage extends ConsumerWidget {
             );
           },
         ),
+        const SizedBox(height: 24),
+        const SectionHeading(title: '最近练习'),
+        const _RecentSessions(),
         const SizedBox(height: 24),
         const SectionHeading(title: '错题本'),
         _ReviewCard(),
