@@ -145,7 +145,11 @@ class _HomePageState extends ConsumerState<HomePage> {
     if (restart) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('题库已全部练过一遍，这次从第一题重新开始')));
+      ).showSnackBar(
+        const SnackBar(
+          content: Text('题库里能练的题都练过了，这次从第一题重新开始（已做过的题也会出现）'),
+        ),
+      );
     }
     await launchPractice(
       context,
