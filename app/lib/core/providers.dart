@@ -49,14 +49,15 @@ final latestActiveSessionProvider = StreamProvider<PracticeSession?>((ref) {
 /// 首页原先只显示 `上次练到第 N / M 题`（N 是当前停留位置）。用户只答了
 /// 1 题、用答题卡翻到最后一题，首页就显示「第 5 / 5 题」，看起来像练完了。
 /// 补上真实已答数量，用户才知道还剩多少。
-final activeSessionAnsweredProvider = FutureProvider.family<int, String>((
+///
+/// 必须用 StreamProvider 订阅答题表：早先是 FutureProvider.family，只读一次
+/// 就把结果缓存住了。用户从练习页退出、回首页继续做几题，首页的“已答 1 题，
+/// 还剩 4 题”永远不更新（实测答完 5 题仍显示 1），用户会以为进度没保存。
+final activeSessionAnsweredProvider = StreamProvider.family<int, String>((
   ref,
   sessionId,
-) async {
-  final answers = await ref
-      .watch(databaseProvider)
-      .answersForSession(sessionId);
-  return answers.where((answer) => answer.submitted).length;
+) {
+  return ref.watch(databaseProvider).watchSubmittedCount(sessionId);
 });
 
 final reviewItemsProvider = StreamProvider<List<ReviewItem>>((ref) {

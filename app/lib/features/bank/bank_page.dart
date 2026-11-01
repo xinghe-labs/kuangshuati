@@ -414,15 +414,41 @@ class _QuestionSearchList extends ConsumerWidget {
   }
 }
 
-class _FavoriteList extends ConsumerWidget {
+class _FavoriteList extends ConsumerStatefulWidget {
   const _FavoriteList({required this.query, required this.onStart});
 
   final String query;
   final Future<void> Function(List<QuestionContent> questions) onStart;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_FavoriteList> createState() => _FavoriteListState();
+}
+
+class _FavoriteListState extends ConsumerState<_FavoriteList> {
+  Future<List<QuestionContent>>? _future;
+  String? _signature;
+
+  /// 收藏列表在搜索框每敲一个字都会重建。原来直接在 build 里调
+  /// `questionsByIds` 并把结果包成新的 Future，于是每按一个键就重新查一遍
+  /// 题库、整个列表闪一次转圈（收藏多了还会卡）。这里按 id 列表做缓存，
+  /// 只有收藏集合真的变了才重新查。
+  Future<List<QuestionContent>> _questionsFor(List<Favorite> items) {
+    final signature = items.map((item) => item.questionId).join('\u0000');
+    if (_future == null || _signature != signature) {
+      _signature = signature;
+      _future = Future.value(
+        ref
+            .read(contentRepositoryProvider)
+            .questionsByIds(items.map((item) => item.questionId)),
+      );
+    }
+    return _future!;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final favorites = ref.watch(favoritesProvider);
+    final query = widget.query;
     final noteById = {
       for (final item in favorites.value ?? const <Favorite>[])
         item.questionId: item.note,
@@ -431,11 +457,9 @@ class _FavoriteList extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => Text('读取收藏失败：$error'),
       data: (items) {
-        final loaded = ref
-            .read(contentRepositoryProvider)
-            .questionsByIds(items.map((item) => item.questionId));
+        final loaded = _questionsFor(items);
         return FutureBuilder<List<QuestionContent>>(
-          future: Future.value(loaded),
+          future: loaded,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
               return const Center(child: CircularProgressIndicator());
@@ -447,7 +471,12 @@ class _FavoriteList extends ConsumerWidget {
                 .where(
                   (question) =>
                       query.isEmpty ||
-                      question.plainStem.toLowerCase().contains(query),
+                      question.plainStem.toLowerCase().contains(query) ||
+                      // 收藏列表本来就显示笔记，搜索却只搜题干：用户明明看到
+                      // 那行写着“笔记：网格化”，搜“网格化”却提示没有匹配。
+                      (noteById[question.id] ?? '').toLowerCase().contains(
+                        query,
+                      ),
                 )
                 .toList(growable: false);
             if (questions.isEmpty) {
@@ -457,7 +486,7 @@ class _FavoriteList extends ConsumerWidget {
                     title: query.isEmpty ? '还没有收藏题目' : '没有匹配的收藏',
                     message: query.isEmpty
                         ? '做题时点一下书签，题目会出现在这里。'
-                        : '换一个题干关键词试试。',
+                        : '换一个题干或笔记关键词试试。',
                   ),
                 ],
               );
@@ -468,7 +497,7 @@ class _FavoriteList extends ConsumerWidget {
                 Align(
                   alignment: Alignment.centerRight,
                   child: FilledButton.icon(
-                    onPressed: () => onStart(questions),
+                    onPressed: () => widget.onStart(questions),
                     icon: const Icon(Icons.play_arrow, size: 18),
                     label: Text('练习全部 ${questions.length} 题'),
                   ),
@@ -536,25 +565,71 @@ class _FavoriteList extends ConsumerWidget {
 }
 
 /// 笔记列表：所有写过笔记的题（无论是否收藏），支持直接开练和删除笔记。
-class _NoteList extends ConsumerWidget {
+class _NoteList extends ConsumerStatefulWidget {
   const _NoteList({required this.query, required this.onStart});
 
   final String query;
   final Future<void> Function(List<QuestionContent> questions) onStart;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_NoteList> createState() => _NoteListState();
+}
+
+class _NoteListState extends ConsumerState<_NoteList> {
+  Future<List<QuestionContent>>? _future;
+  String? _signature;
+
+  /// 与收藏列表同理：搜索框每敲一个字都会重建，不能每次都重查题库。
+  Future<List<QuestionContent>> _questionsFor(List<Favorite> items) {
+    final signature = items.map((item) => item.questionId).join('\u0000');
+    if (_future == null || _signature != signature) {
+      _signature = signature;
+      _future = Future.value(
+        ref
+            .read(contentRepositoryProvider)
+            .questionsByIds(items.map((item) => item.questionId)),
+      );
+    }
+    return _future!;
+  }
+
+  /// 删除笔记要确认。原来点一下垃圾桶就直接清空，长按也救不回来，
+  /// 而笔记是用户自己一个字一个字敲的，误触代价很大。
+  Future<void> _deleteNote(String questionId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除这条笔记？'),
+        content: const Text('笔记内容删除后无法恢复，题目本身不受影响。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.negative),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(databaseProvider).setFavoriteNote(questionId, '');
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final notes = ref.watch(notesProvider);
+    final query = widget.query;
     return notes.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => Text('读取笔记失败：$error'),
       data: (items) {
-        final loaded = ref
-            .read(contentRepositoryProvider)
-            .questionsByIds(items.map((item) => item.questionId));
+        final loaded = _questionsFor(items);
         final noteById = {for (final item in items) item.questionId: item.note};
         return FutureBuilder<List<QuestionContent>>(
-          future: Future.value(loaded),
+          future: loaded,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
               return const Center(child: CircularProgressIndicator());
@@ -590,7 +665,7 @@ class _NoteList extends ConsumerWidget {
                 Align(
                   alignment: Alignment.centerRight,
                   child: FilledButton.icon(
-                    onPressed: () => onStart(questions),
+                    onPressed: () => widget.onStart(questions),
                     icon: const Icon(Icons.play_arrow, size: 18),
                     label: Text('复习全部 ${questions.length} 题'),
                   ),
@@ -633,9 +708,7 @@ class _NoteList extends ConsumerWidget {
                         ),
                         trailing: IconButton(
                           tooltip: '删除笔记',
-                          onPressed: () => ref
-                              .read(databaseProvider)
-                              .setFavoriteNote(question.id, ''),
+                          onPressed: () => _deleteNote(question.id),
                           icon: Icon(
                             Icons.delete_outline,
                             size: 20,
