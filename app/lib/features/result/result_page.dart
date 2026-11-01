@@ -66,20 +66,24 @@ class _ResultPageState extends ConsumerState<ResultPage> {
             module: question.module,
           ),
     ];
-    final answered = details
-        .where((item) => (item.answer?.selected.isNotEmpty ?? false))
-        .length;
-    final correct = details
-        .where((item) => item.answer?.isCorrect == true)
-        .length;
     // 题库换版后旧题可能已不存在：总题数按会话记录算，
     // 失效题不计入正确率分母，但必须明确告诉用户。
     final missingCount = _rows.length - details.length;
+    // 已答/答对数只看作答记录，不看题目是否还在题库里：
+    // 早先两者都从 details 统计，题库一换版，明明答了 120 题的模考
+    // 会显示“已答 118”，模考得分率的分母（details.length）也跟着变小，
+    // 少几道题就等于凭空多得分。
+    final answeredCount = _rows
+        .where((row) => _answers[row.questionId]?.selected.isNotEmpty ?? false)
+        .length;
+    final correctCount = _rows
+        .where((row) => _answers[row.questionId]?.isCorrect == true)
+        .length;
     // 开发文档 §11.1 / §11.2：练习看“正确率”（分母只算已作答题），
     // 模考看“得分率”（分母是整卷题数，未答按零分）。
     final isMock = session.mode == domain.PracticeMode.mock.name;
-    final ratioBase = isMock ? details.length : answered;
-    final score = ratioBase == 0 ? 0.0 : correct / ratioBase;
+    final ratioBase = isMock ? _rows.length : answeredCount;
+    final score = ratioBase == 0 ? 0.0 : correctCount / ratioBase;
     final visible = _wrongOnly
         ? details.where((item) => item.answer?.isCorrect != true).toList()
         : details;
@@ -175,10 +179,10 @@ class _ResultPageState extends ConsumerState<ResultPage> {
                       ),
                     ),
                     Expanded(
-                      child: _ResultMetric(label: '已答', value: '$answered'),
+                      child: _ResultMetric(label: '已答', value: '$answeredCount'),
                     ),
                     Expanded(
-                      child: _ResultMetric(label: '答对', value: '$correct'),
+                      child: _ResultMetric(label: '答对', value: '$correctCount'),
                     ),
                   ],
                 ),
@@ -242,7 +246,16 @@ class _ResultPageState extends ConsumerState<ResultPage> {
               ),
             ),
           if (visible.isEmpty)
-            const AppEmptyState(title: '没有错题', message: '这次练习全部答对。')
+            // 题库换版后旧题全部找不到时 details 是空的，一道题都展示不出来。
+            // 这里以前不看这个情况，统一写“没有错题 / 这次练习全部答对”，
+            // 用户明明做错了一堆题，却被告诉全对。
+            details.isEmpty
+                ? const AppEmptyState(
+                    title: '题目已随题库更新失效',
+                    message: '这次练习的题目在新题库里都找不到了，无法展示逐题回顾。'
+                        '上面的正确率仍按你当时的作答计算。',
+                  )
+                : const AppEmptyState(title: '没有错题', message: '这次练习全部答对。')
           else
             for (final item in visible) ...[
               _ResultQuestion(
