@@ -11,6 +11,7 @@ import 'package:kuangshuati/core/theme/app_theme.dart';
 import 'package:kuangshuati/data/content/content_repository.dart';
 import 'package:kuangshuati/data/content/seed_content_repository.dart';
 import 'package:kuangshuati/data/database/app_database.dart';
+import 'package:kuangshuati/data/database/session_answer_extensions.dart';
 import 'package:kuangshuati/domain/models.dart';
 import 'package:kuangshuati/features/practice/practice_page.dart';
 
@@ -183,7 +184,7 @@ void main() {
 
     // 选中的选项会落库；早先只绑定了 1-4，按 5 毫无反应。
     final answers = await database.answersForSession('session-five');
-    expect(answers.single.selectedJson, '["E"]');
+    expect(answers.single.selected, {'E'});
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 2));
