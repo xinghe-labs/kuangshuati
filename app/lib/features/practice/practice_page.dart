@@ -129,7 +129,74 @@ class _PracticePageState extends ConsumerState<PracticePage>
     final session = _session!;
     final question = _currentQuestion;
     if (question == null) {
-      return const Scaffold(body: Center(child: Text('题目不存在')));
+      // 题库换版后，进行中的练习里可能有题已经不存在。
+      // 这里以前只画一行“题目不存在”，没有 AppBar、没有返回按钮，
+      // 而外层 PopScope 又是 canPop: false —— 用户被彻底关在死页面里，
+      // 只能杀进程（进度还在，但人已经不敢再用了）。
+      // 现在给返回/交卷两个出口，并说明发生了什么。
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) async {
+          if (didPop) return;
+          await _confirmExit();
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              tooltip: '返回',
+              onPressed: _confirmExit,
+              icon: const Icon(Icons.arrow_back),
+            ),
+            title: Text(
+              session.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            actions: [
+              TextButton(
+                onPressed: _finishing ? null : _confirmFinish,
+                child: const Text('交卷'),
+              ),
+            ],
+          ),
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.report_gmailerrorred_outlined,
+                    size: 40,
+                    color: AppColors.ink,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '这道题已随题库更新失效',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '第 ${_index + 1} / ${_rows.length} 题在新题库里找不到了。'
+                    '你可以直接交卷，或者返回题库重新开始一组练习。',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    onPressed: _finishing ? null : _confirmFinish,
+                    child: const Text('交卷查看结果'),
+                  ),
+                  TextButton(
+                    onPressed: _confirmExit,
+                    child: const Text('返回'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
     }
     final answer = _answers[question.id];
     final showResult =
