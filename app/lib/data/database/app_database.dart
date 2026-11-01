@@ -625,13 +625,23 @@ class AppDatabase extends _$AppDatabase {
     final wasSelected =
         existing != null && _decodeSelected(existing.selectedJson).isNotEmpty;
     final firstAnswer = nowSelected && !wasSelected;
-    // 模块统计的题数/正确数只能算一次：用 moduleCounted 记住是否已计过，
-    // 后续重存（改选项、翻题、标记不确定、退出前保存）只补时长增量。
-    final countedBefore = existing?.moduleCounted ?? false;
     // 模块的题数和正确数必须“确定判过分”才记：
     // 模考中途选完选项但没交卷时 isCorrect 是 null，把它当 0 分计入，
     // 会凭空拉低该模块正确率；交卷时 finalizeSession 会按真实判分补计。
     final graded = isCorrect != null;
+    // 当日「正确」必须按“第一次拿到明确对错”记，不能只在 firstAnswer 时记。
+    //
+    // 练习页的真实调用顺序是：点选项先落一次库（selected 有值、isCorrect=null，
+    // 这一次就是 firstAnswer），再点「提交答案」落第二次（submitted=true、
+    // isCorrect=true）。早先 correct 只跟 firstAnswer 走，于是每道答对的题
+    // 都只在第一次（isCorrect 还是 null）时被统计：
+    //   首页「今日概览」显示「已答 10 题 / 正确 0 题」，
+    //   统计页近 7 天正确率恒为 0%，
+    //   而模块正确率却是正常的（它按 graded 记）——同一份数据两处矛盾。
+    final firstGraded = graded && nowSelected && existing?.isCorrect == null;
+    // 模块统计的题数/正确数只能算一次：用 moduleCounted 记住是否已计过，
+    // 后续重存（改选项、翻题、标记不确定、退出前保存）只补时长增量。
+    final countedBefore = existing?.moduleCounted ?? false;
     final countsNow =
         nowSelected && graded && module != null && module.isNotEmpty;
     // 时长是累计值（练习页每次都传本题的累计用时），只能补增量，
@@ -659,10 +669,10 @@ class AppDatabase extends _$AppDatabase {
     await (update(practiceSessions)..where((row) => row.id.equals(sessionId)))
         .write(PracticeSessionsCompanion(updatedAt: Value(now)));
     final shouldCount = countsNow && !countedBefore;
-    if (firstAnswer || shouldCount || durationDelta > 0) {
+    if (firstAnswer || firstGraded || shouldCount || durationDelta > 0) {
       await _accumulateDailyStats(
         answered: firstAnswer ? 1 : 0,
-        correct: firstAnswer && isCorrect == true ? 1 : 0,
+        correct: firstGraded && isCorrect == true ? 1 : 0,
         durationMs: durationDelta,
         bumpStreak: firstAnswer,
       );
