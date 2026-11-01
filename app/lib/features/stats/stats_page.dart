@@ -78,12 +78,10 @@ class _RecentSessions extends ConsumerWidget {
                 subtitle: Text(
                   '${_formatDay(row.session.updatedAt)} · '
                   '${row.summary.answeredCount}/${row.summary.totalCount} 题 · '
-                  // 模考看「得分率」（分母是整卷题数，未答按 0 分），
-                  // 练习看「正确率」（分母是已答题数）。这里以前统一写
-                  // “正确率”，于是一场 100 题只答 50 题的模考，列表里
-                  // 显示“50/100 题 · 正确率 80%”，和结果页的 40% 对不上。
-                  '${row.session.mode == 'mock' ? '得分率' : '正确率'} '
-                  '${_ratePercent(row)}%',
+                  // 没交卷就被结束的练习不能冒充成绩：
+                  // 它里面的答案根本没判过分，早先却和正式成绩一样显示
+                  // “正确率 0%”，用户会以为自己那组全错。
+                  '${_describeRate(row)}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 trailing: const Icon(Icons.arrow_forward, size: 17),
@@ -95,11 +93,24 @@ class _RecentSessions extends ConsumerWidget {
     );
   }
 
+  /// 未交卷的练习不写正确率，直接说明它没交卷。
+  String _describeRate(RecentSessionEntry row) {
+    if (row.session.status == SessionStatus.abandoned.value) {
+      return '未交卷';
+    }
+    final label = row.session.mode == 'mock' ? '得分率' : '正确率';
+    return '$label ${_ratePercent(row)}%';
+  }
+
   /// 与结果页口径一致：模考分母是整卷题数，练习分母是已答题数。
+  ///
+  /// 分母只算“真的判过分的题”：没交卷就结束的练习里，选了选项但
+  /// 没判分的题既不算对也不算错，不能拿来当分母。
   int _ratePercent(RecentSessionEntry row) {
+    final graded = row.summary.gradedCount ?? row.summary.answeredCount;
     final base = row.session.mode == 'mock'
         ? row.summary.totalCount
-        : row.summary.answeredCount;
+        : graded;
     if (base == 0) return 0;
     return (row.summary.correctCount * 100 / base).round();
   }

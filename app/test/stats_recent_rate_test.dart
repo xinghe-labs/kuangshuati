@@ -118,4 +118,76 @@ void main() {
     await _settle(tester, 50);
     await tester.pump(const Duration(seconds: 1));
   });
+
+  testWidgets('未交卷的练习在最近练习里不显示正确率', (tester) async {
+    final questions = [_question(1), _question(2)];
+    await tester.runAsync(() async {
+      await database.createSession(
+        id: 'abandoned-1',
+        mode: PracticeMode.sequence,
+        title: '顺序练习',
+        questions: questions,
+        revealMode: RevealMode.immediate,
+        requestedCount: 2,
+      );
+      for (final question in questions) {
+        await database.saveAnswer(
+          sessionId: 'abandoned-1',
+          questionId: question.id,
+          selected: {'A'},
+          submitted: false,
+          isCorrect: null,
+          durationMs: 1000,
+          module: question.module,
+        );
+      }
+      // 开另一组，把这组挤成 abandoned。
+      await database.createSession(
+        id: 'active-1',
+        mode: PracticeMode.random,
+        title: '随机练习',
+        questions: [questions.first],
+        revealMode: RevealMode.immediate,
+        requestedCount: 1,
+      );
+    });
+
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(database),
+          contentRepositoryProvider.overrideWithValue(
+            _EmptyContentRepository(),
+          ),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: const Scaffold(body: StatsPage()),
+        ),
+      ),
+    );
+    await _settle(tester, 600);
+    await tester.pumpAndSettle();
+
+    final texts = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((widget) => widget.data ?? '')
+        .toList();
+    final subtitle = texts.firstWhere(
+      (text) => text.contains('/2 题'),
+      orElse: () => '',
+    );
+    // ignore: avoid_print
+    print('ABANDONED_SUBTITLE $subtitle');
+    // 用户只是没做完就退出，列表不能写“正确率 0%”。
+    expect(subtitle, contains('未交卷'));
+    expect(subtitle, isNot(contains('正确率')));
+
+    await tester.pumpWidget(const SizedBox());
+    await _settle(tester, 50);
+    await tester.pump(const Duration(seconds: 1));
+  });
 }
