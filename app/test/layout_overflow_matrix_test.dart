@@ -17,6 +17,8 @@ import 'package:kuangshuati/features/bank/bank_page.dart';
 import 'package:kuangshuati/features/content/content_manager_base.dart';
 import 'package:kuangshuati/features/home/home_page.dart';
 import 'package:kuangshuati/features/settings/settings_page.dart';
+import 'package:kuangshuati/features/backup/backup_page.dart';
+import 'package:kuangshuati/features/content/content_install_page.dart';
 import 'package:kuangshuati/features/practice/practice_page.dart';
 import 'package:kuangshuati/features/result/result_page.dart';
 import 'package:kuangshuati/features/stats/stats_page.dart';
@@ -142,6 +144,8 @@ void main() {
     'settings': const Scaffold(body: SettingsPage()),
     'practice': const PracticePage(sessionId: 's1'),
     'result': const ResultPage(sessionId: 's1'),
+    'backup': const BackupPage(),
+    'content': const ContentInstallPage(),
   };
 
   for (final width in [320.0, 360.0]) {
