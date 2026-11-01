@@ -632,6 +632,8 @@ class _PracticePageState extends ConsumerState<PracticePage>
       uncertain: _uncertain.contains(question.id),
       durationMs: duration,
       answeredAt: DateTime.now().millisecondsSinceEpoch,
+      // 页面内的临时副本，只用于渲染；真正计入模块统计的是数据库行。
+      moduleCounted: false,
     );
     await ref
         .read(databaseProvider)
@@ -643,6 +645,9 @@ class _PracticePageState extends ConsumerState<PracticePage>
           isCorrect: isCorrect,
           durationMs: duration,
           uncertain: _uncertain.contains(question.id),
+          // 模块名要一起传：数据库靠它实时累计「各模块正确率」，
+          // 否则没交卷的那几十题在统计页完全看不到。
+          module: question.module,
         );
     _answers[question.id] = answer;
     _questionBaseDurations[question.id] = duration;
