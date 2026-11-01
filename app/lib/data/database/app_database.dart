@@ -346,17 +346,24 @@ class AppDatabase extends _$AppDatabase {
     final byQuestion = {for (final answer in answers) answer.questionId: answer};
     var answered = 0;
     var correct = 0;
+    var graded = 0;
     for (final row in rows) {
       final answer = byQuestion[row.questionId];
       final selected = _decodeSelected(answer?.selectedJson);
       if (selected.isEmpty) continue;
       answered++;
-      if (answer?.isCorrect == true) correct++;
+      // isCorrect 为 null 表示这道题选了选项但从未判过分：
+      // 没交卷就被结束的练习就是这种情况，不能算作答错。
+      if (answer?.isCorrect != null) {
+        graded++;
+        if (answer!.isCorrect == true) correct++;
+      }
     }
     return SessionSummary(
       totalCount: rows.length,
       answeredCount: answered,
       correctCount: correct,
+      gradedCount: graded,
     );
   }
 
