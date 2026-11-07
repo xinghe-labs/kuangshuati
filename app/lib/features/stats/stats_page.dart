@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/providers.dart';
 import '../../core/router.dart';
@@ -9,6 +10,7 @@ import '../../data/database/app_database.dart';
 import '../../domain/models.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../practice/practice_launcher.dart';
+import '../share/share_card_service.dart';
 
 /// 一组练习的默认题量（requirements-discovery Q18：默认 20 题）。
 const int kDefaultPracticeCount = 20;
@@ -278,6 +280,21 @@ class StatsPage extends ConsumerWidget {
                     MetricItem('累计练习', '${streak.value?.totalDays ?? 0}', '天'),
                   ],
                 ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _shareCard(
+                      context,
+                      answered: answered,
+                      correct: correct,
+                      streakDays: streak.value?.currentDays ?? 0,
+                      dayLabel: localDay(now),
+                    ),
+                    icon: const Icon(Icons.ios_share, size: 17),
+                    label: const Text('把成绩分享给朋友'),
+                  ),
+                ),
               ],
             );
           },
@@ -382,6 +399,43 @@ class StatsPage extends ConsumerWidget {
         const SizedBox(height: 12),
       ],
     );
+  }
+
+  /// 生成成绩卡并调起系统分享面板。
+  ///
+  /// 渲染失败静默返回（renderShareCard 已兜底 null），这里只
+  /// 在没有可分享文件时提示一句，不把异常抛给用户。
+  Future<void> _shareCard(
+    BuildContext context, {
+    required int answered,
+    required int correct,
+    required int streakDays,
+    required String dayLabel,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final file = await renderShareCard(
+      ShareCardData(
+        answered: answered,
+        correct: correct,
+        streakDays: streakDays,
+        totalDays: 0,
+        dateLabel: dayLabel,
+      ),
+    );
+    if (file == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('成绩卡生成失败，请再试一次')),
+      );
+      return;
+    }
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path)],
+        text: '我的狂刷题成绩',
+      ),
+    );
+    // 分享完成后不立即删临时文件：微信/钉钢等目标可能还在读取，
+    // 留在临时目录里由系统清理。
   }
 
   Future<void> _startModule(

@@ -58,6 +58,7 @@ dependencies:
   # 每日练习提醒：本地通知，不联网、不上报（隐私承诺不变）。
   flutter_local_notifications: ^19.4.1
   timezone: ^0.10.1
+  share_plus: ^13.3.1
 
 dev_dependencies:
   flutter_test:
