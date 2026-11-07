@@ -17,16 +17,26 @@ void main() {
       FullContentRepository? repository;
       try {
         final assets = _findAssetsDirectory();
+        // 题库分片不随附开源仓库（体积 + 版权），缺失时跳过这组集成测试，
+        // 避免公开仓库的 CI 因为拿不到真实题库而变红。
+        final partsDirectory = Directory(
+          '${assets.path}${Platform.pathSeparator}content${Platform.pathSeparator}parts',
+        );
+        if (!partsDirectory.existsSync()) {
+          markTestSkipped('未提供题库分片，跳过真实题库集成测试');
+          return;
+        }
         final parts =
-            Directory(
-                  '${assets.path}${Platform.pathSeparator}content${Platform.pathSeparator}parts',
-                )
+            partsDirectory
                 .listSync()
                 .whereType<File>()
                 .where((file) => file.path.contains('.sqlite.part'))
                 .toList()
               ..sort((left, right) => left.path.compareTo(right.path));
-        expect(parts, isNotEmpty);
+        if (parts.isEmpty) {
+          markTestSkipped('未提供题库分片，跳过真实题库集成测试');
+          return;
+        }
         final database = File(
           '${directory.path}${Platform.pathSeparator}content.sqlite',
         );
