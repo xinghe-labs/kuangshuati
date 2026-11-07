@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
-import '../content/content_import_service.dart';
+import '../content/content_import_models.dart';
 import '../content/content_manager_base.dart';
 import '../content/content_install_page.dart';
 import '../practice/time_budget.dart';
