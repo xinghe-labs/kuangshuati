@@ -398,19 +398,26 @@ class _PracticePageState extends ConsumerState<PracticePage>
                   ),
                 ),
                 const SizedBox(height: 18),
-                for (final entry in question.options.entries)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 9),
-                    child: _OptionTile(
-                      letter: entry.key,
-                      text: entry.value,
-                      selected:
-                          _selected[question.id]?.contains(entry.key) ?? false,
-                      showResult: showResult,
-                      correct: question.correctAnswers.contains(entry.key),
-                      onTap: () => _selectOption(entry.key),
+                if (question.options.isEmpty)
+                  _SelfAssessment(
+                    submitted: answer?.submitted == true,
+                    isCorrect: answer?.isCorrect,
+                    onAssess: _selfAssess,
+                  )
+                else
+                  for (final entry in question.options.entries)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 9),
+                      child: _OptionTile(
+                        letter: entry.key,
+                        text: entry.value,
+                        selected:
+                            _selected[question.id]?.contains(entry.key) ?? false,
+                        showResult: showResult,
+                        correct: question.correctAnswers.contains(entry.key),
+                        onTap: () => _selectOption(entry.key),
+                      ),
                     ),
-                  ),
                 const SizedBox(height: 8),
                 // 小屏大字号下四个操作放不下一行时自动换行，避免 RenderFlex 溢出。
                 Wrap(
@@ -622,6 +629,17 @@ class _PracticePageState extends ConsumerState<PracticePage>
     await _saveCurrent(submitted: false, isCorrect: null);
   }
 
+  /// 自评题（无选项）：用户自报对错，直接入库为已提交答案，
+  /// 正确率/错题本/模块统计全链路复用 isCorrect。
+  Future<void> _selfAssess(bool correct) async {
+    final question = _currentQuestion;
+    final session = _session;
+    if (question == null || session == null) return;
+    if (_answers[question.id]?.submitted == true) return;
+    await _saveCurrent(submitted: true, isCorrect: correct);
+    if (mounted) setState(() {});
+  }
+
   Future<void> _toggleUncertain(String questionId) async {
     setState(() {
       if (!_uncertain.add(questionId)) _uncertain.remove(questionId);
@@ -650,9 +668,13 @@ class _PracticePageState extends ConsumerState<PracticePage>
     }
     final selected = _selected[question.id] ?? {};
     if (selected.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请先选择答案')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            question.options.isEmpty ? '请先自评本题（答对了/答错了）' : '请先选择答案',
+          ),
+        ),
+      );
       return;
     }
     await _saveCurrent(
@@ -1387,10 +1409,16 @@ class _AnswerPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            '正确答案：${correctAnswers.join('、')}',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
+          if (correctAnswers.isEmpty)
+            Text(
+              '自评题：按你的自评结果计分',
+              style: Theme.of(context).textTheme.bodyMedium,
+            )
+          else
+            Text(
+              '正确答案：${correctAnswers.join('、')}',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
           const SizedBox(height: 11),
           Text('解析', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 5),
@@ -1401,9 +1429,79 @@ class _AnswerPanel extends StatelessWidget {
   }
 }
 
+/// 自评题（无选项）作答控件：用户自报对错，结果直接入库计分。
+class _SelfAssessment extends StatelessWidget {
+  const _SelfAssessment({
+    required this.submitted,
+    required this.isCorrect,
+    required this.onAssess,
+  });
+
+  final bool submitted;
+  final bool? isCorrect;
+  final ValueChanged<bool> onAssess;
+
+  @override
+  Widget build(BuildContext context) {
+    if (submitted) {
+      final correct = isCorrect == true;
+      final color = correct ? AppColors.positive : AppColors.negative;
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        decoration: BoxDecoration(
+          color: correct ? AppColors.positiveFill : AppColors.negativeFill,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              correct ? Icons.check_circle : Icons.cancel,
+              size: 18,
+              color: color,
+            ),
+            const SizedBox(width: 7),
+            Text(
+              correct ? '已自评：答对了' : '已自评：答错了',
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      );
+    }
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => onAssess(true),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.positive,
+              side: BorderSide(color: AppColors.positive),
+            ),
+            icon: const Icon(Icons.check_circle_outline, size: 18),
+            label: const Text('答对了'),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => onAssess(false),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.negative,
+              side: BorderSide(color: AppColors.negative),
+            ),
+            icon: const Icon(Icons.highlight_off, size: 18),
+            label: const Text('答错了'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class AppTag extends StatelessWidget {
   const AppTag({required this.label, super.key});
-
   final String label;
 
   @override
