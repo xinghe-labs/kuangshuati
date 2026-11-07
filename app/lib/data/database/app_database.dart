@@ -63,6 +63,17 @@ class SessionAnswers extends Table {
   /// 否则交卷时会重复累加。
   BoolColumn get moduleCounted => boolean().withDefault(const Constant(false))();
 
+  /// 这道题是否已经计入过「当日统计」（已答 / 正确 / 用时 / 连续天数）。
+  ///
+  /// 模考和“关闭立即出答案”的练习模式下，用户每选一个选项就落库一次
+  /// （submitted=false、isCorrect=null），这一次已经算了一题「已答」；
+  /// 交卷时 finalizeSession 又把「选过选项但没提交」的题再算一遍，
+  /// 于是同一题被记两次：答了 20 题的模考，首页写「今日已答 40」。
+  ///
+  /// 与 moduleCounted 不同，模块统计要等“判过分”才算，当日已答只要
+  /// 选过就算，所以两者不能用同一个标记。
+  BoolColumn get dailyCounted => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column<Object>> get primaryKey => {sessionId, questionId};
 }
@@ -153,7 +164,7 @@ class AppDatabase extends _$AppDatabase {
   DateTime _now() => (_clock ?? DateTime.now)();
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -180,6 +191,12 @@ class AppDatabase extends _$AppDatabase {
         // 模块统计改成“提交即累计”，需要记住哪些题已经计过，
         // 避免交卷时重复累加。旧数据都是交卷时算的，保持默认 false。
         await migrator.addColumn(sessionAnswers, sessionAnswers.moduleCounted);
+      }
+      if (from < 6) {
+        // 当日统计改成“选过选项就算已答”，需要记住哪些题已经计过，
+        // 避免交卷时同一题再算一遍。旧数据的当日统计本来就是交卷时
+        // 统一累加的，给已有答案行置 true 会少算，所以保持默认 false。
+        await migrator.addColumn(sessionAnswers, sessionAnswers.dailyCounted);
       }
     },
     onCreate: (migrator) async {
@@ -644,6 +661,10 @@ class AppDatabase extends _$AppDatabase {
     final countedBefore = existing?.moduleCounted ?? false;
     final countsNow =
         nowSelected && graded && module != null && module.isNotEmpty;
+    // 当日统计的「已答」只能算一次：模考里选完选项（submitted=false）时
+    // 已经算过一次，交卷时 finalizeSession 不能再算一遍。
+    final dailyCountedBefore = existing?.dailyCounted ?? false;
+    final countDailyNow = nowSelected && !dailyCountedBefore;
     // 时长是累计值（练习页每次都传本题的累计用时），只能补增量，
     // 否则每翻一次题都会把模块总时长再加一遍。
     final previousDurationMs = existing?.durationMs ?? 0;
@@ -663,18 +684,23 @@ class AppDatabase extends _$AppDatabase {
         // 已经计过就必须保持 true：insertOnConflictUpdate 会整行覆盖，
         // 否则一次未提交的保存就能把它清回 false，交卷时又重复计一次。
         moduleCounted: Value(countedBefore || countsNow),
+        dailyCounted: Value(dailyCountedBefore || countDailyNow),
       ),
     );
     final session = await sessionById(sessionId);
     await (update(practiceSessions)..where((row) => row.id.equals(sessionId)))
         .write(PracticeSessionsCompanion(updatedAt: Value(now)));
     final shouldCount = countsNow && !countedBefore;
-    if (firstAnswer || firstGraded || shouldCount || durationDelta > 0) {
+    if (firstAnswer ||
+        firstGraded ||
+        shouldCount ||
+        countDailyNow ||
+        durationDelta > 0) {
       await _accumulateDailyStats(
-        answered: firstAnswer ? 1 : 0,
+        answered: countDailyNow ? 1 : 0,
         correct: firstGraded && isCorrect == true ? 1 : 0,
         durationMs: durationDelta,
-        bumpStreak: firstAnswer,
+        bumpStreak: countDailyNow,
       );
       // 模块统计也要实时累计：原来只写在 finalizeSession 里，
       // 用户做了几十题但没交卷（直接退出、或点了别的练习把旧会话挤掉），
@@ -812,10 +838,21 @@ class AppDatabase extends _$AppDatabase {
         final isCorrect = selected.isNotEmpty && question.isCorrect(selected);
         final blank = selected.isEmpty;
         final alreadySubmitted = answer?.submitted ?? false;
-        if (!blank && !alreadySubmitted) {
+        // 这道题是否已经在 saveAnswer 里算过当日「已答」。
+        // 模考里选完选项（submitted=false）时已经算过一次，交卷时
+        // 不能再算一遍，否则答 20 题的模考会写成「今日已答 40」。
+        final alreadyDailyCounted = answer?.dailyCounted ?? false;
+        // 「正确」和「已答」不是同一个时点：模考里选完选项只算「已答」，
+        // 对错要到交卷才出来；练习模式里点「提交答案」时 saveAnswer 就
+        // 已经判过对错并计过「正确」了。所以这里只在“交卷前从未拿到
+        // 对错结论”时才补计正确数，否则同一题会被算两次。
+        final wasGraded = answer?.isCorrect != null;
+        if (!blank && !alreadyDailyCounted) {
           freshAnswered++;
-          if (isCorrect) freshCorrect++;
           freshDurationMs += answer?.durationMs ?? 0;
+        }
+        if (!blank && !wasGraded && isCorrect) {
+          freshCorrect++;
         }
 
         await into(sessionAnswers).insertOnConflictUpdate(
@@ -828,6 +865,10 @@ class AppDatabase extends _$AppDatabase {
             uncertain: Value(answer?.uncertain ?? false),
             durationMs: Value(answer?.durationMs ?? 0),
             answeredAt: Value(answer?.answeredAt ?? nowMs),
+            // 已计入过的标记必须保持：整行覆盖会把它清回 false，
+            // 下一次保存或再次交卷就会重复统计。
+            moduleCounted: Value(answer?.moduleCounted ?? false),
+            dailyCounted: Value(answer != null),
           ),
         );
 
