@@ -9,6 +9,17 @@ import '../../data/content/seed_content_repository.dart';
 import 'content_manager_base.dart';
 import 'content_package_service.dart';
 
+/// 没有已安装题库时，是否用内置演示题库兜底。
+///
+/// 默认在 debug 构建开启：克隆仓库后 `flutter run` 就能直接进入练习，
+/// 不必先下载约 145 MB 的离线题库包。release 构建保持关闭，
+/// 线上行为与之前一致（首屏仍是下载页）。
+/// 需要验证真实下载流程时用 `--dart-define=KUANGSHUATI_DEMO=false` 关掉。
+const bool kDemoContentFallback = bool.fromEnvironment(
+  'KUANGSHUATI_DEMO',
+  defaultValue: kDebugMode,
+);
+
 /// 把底层异常翻成用户能看懂的一句话。
 ///
 /// 直接展示 `SocketException: Connection refused ... errno = 111`
@@ -63,6 +74,9 @@ class ContentManager extends ContentManagerBase {
   bool _manifestCheckStarted = false;
   bool _disposed = false;
 
+  /// 当前是否靠内置演示题库支撑（没有已安装的离线题库）。
+  bool _demoFallback = false;
+
   @override
   ContentRepository get repository => _repository;
 
@@ -104,6 +118,15 @@ class ContentManager extends ContentManagerBase {
       throw const ContentPackageException('测试内容管理器未配置题库下载服务');
     }
     return service;
+  }
+
+  /// 切到内置演示题库：repository 用 seed，phase 直接 ready，
+  /// 让没有题库包的开发/试用环境也能走完整练习闭环。
+  void _enterDemoFallback() {
+    _repository = _seedRepository;
+    _demoFallback = true;
+    _phase = ContentManagerPhase.ready;
+    _stage = '正在使用内置演示题库（${SeedContentRepository.questions.length} 题）';
   }
 
   /// 把异常存成「用户能看懂的一句 + 调试用的原文」。
@@ -148,8 +171,12 @@ class ContentManager extends ContentManagerBase {
           _errorMessage = '已安装的离线题库损坏，需要重新下载。';
         }
       }
-      _phase = ContentManagerPhase.needsDownload;
-      _stage = '首次使用需要下载离线题库';
+      if (kDemoContentFallback) {
+        _enterDemoFallback();
+      } else {
+        _phase = ContentManagerPhase.needsDownload;
+        _stage = '首次使用需要下载离线题库';
+      }
       notifyListeners();
     } on Object catch (error) {
       _phase = ContentManagerPhase.failed;
@@ -172,7 +199,9 @@ class ContentManager extends ContentManagerBase {
     }
     try {
       _availableManifest = await _service.fetchManifest();
-      if (_fullRepository == null) {
+      if (_fullRepository == null && _demoFallback) {
+        _enterDemoFallback();
+      } else if (_fullRepository == null) {
         _phase = ContentManagerPhase.needsDownload;
         _stage = '离线题库尚未安装';
       } else {
@@ -184,6 +213,9 @@ class ContentManager extends ContentManagerBase {
       if (_fullRepository != null) {
         _phase = ContentManagerPhase.ready;
         _stage = '无法检查题库更新';
+      } else if (_demoFallback) {
+        _phase = ContentManagerPhase.ready;
+        _stage = '无法检查题库更新，继续使用内置演示题库';
       } else {
         _phase = ContentManagerPhase.failed;
         _stage = '无法获取题库下载信息';
@@ -228,6 +260,7 @@ class ContentManager extends ContentManagerBase {
       _repository = installed;
       _installedManifest = manifest;
       _progress = 1;
+      _demoFallback = false;
       _phase = ContentManagerPhase.ready;
       _stage = '离线题库安装完成';
       notifyListeners();

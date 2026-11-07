@@ -1,116 +1,125 @@
 # 狂刷题
 
-面向本人和少量熟人的行测真题工具。产品以“下载或安装后完全离线使用”为前提，核心闭环是：
+**把 5.8 万道行测真题装进手机，断网也能刷。不注册、不登录、不埋点，作答记录只留在这台设备上。**
 
-```text
-开始/继续练习 -> 作答 -> 判题解析 -> 结果 -> 错题复习 -> 下一组练习
-```
+![License](https://img.shields.io/badge/license-Apache--2.0-blue)
+![Flutter](https://img.shields.io/badge/Flutter-3.44-02569B)
+![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Web-3DDC84)
 
-当前仓库已进入 **Android Flutter 全量题库 MVP** 阶段：完整题库已转换为带图片的本地 SQLite 内容库，手机端练习、恢复、错题、统计、收藏与设置闭环已通过 真机 真机集成测试。
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/home.png" alt="首页：今日概览与练习入口" width="170"><br><sub>首页 · 今日概览</sub></td>
+    <td align="center"><img src="docs/screenshots/papers.png" alt="题库页：试卷列表" width="170"><br><sub>题库 · 515 套试卷</sub></td>
+    <td align="center"><img src="docs/screenshots/practice.png" alt="资料分析题，题干带两个图表" width="170"><br><sub>资料分析题（带图）</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/selected.png" alt="已选答案 A，计时中" width="170"><br><sub>作答 · 计时</sub></td>
+    <td align="center"><img src="docs/screenshots/solution.png" alt="回答错误后的解析页" width="170"><br><sub>错题解析</sub></td>
+    <td align="center"><img src="docs/screenshots/result.png" alt="练习结果与逐题回顾" width="170"><br><sub>结果 · 逐题回顾</sub></td>
+  </tr>
+</table>
 
-## 交付内容
+<sub>截图来自真机上的 release 构建，不是原型图。</sub>
 
-| 文件 | 内容 |
-|---|---|
-| [需求发现](docs/requirements-discovery.md) | 30 轮用户视角自问自答、事实基线、行为规则、发布边界与 97% 置信度结论 |
-| [开发文档](docs/development-plan.md) | 技术架构、数据模型、核心算法、同步与离线策略、迁移、测试和里程碑 |
-| [UI 规范](docs/ui-spec.md) | 信息架构、视觉系统、页面与组件状态、响应式、无障碍和验收记录 |
-| [HTML 原型](ui/index.html) | 可直接在浏览器运行的移动优先交互原型 |
-| [交互脚本](ui/app.js) | 练习会话、筛选、错题、统计、设置和本地持久化 |
-| [视觉样式](ui/styles.css) | 桌面与手机布局、视觉 Token、组件状态和动效降级 |
-| [Flutter 客户端](app/) | Android/iOS 共用的本地离线刷题应用 |
-| [题库导入器](tools/import_question_bank.py) | 从已验证 JSONL 构建带图片的 SQLite 内容库并生成 16 MiB 分片 |
+## 它能做什么
 
-## 查看原型
+- **真离线**：58,890 道题、515 套试卷、39,196 张题图放在本地 SQLite（约 297 MB），装好题库后全程不需要网络。
+- **六种练习入口**：顺序练习、随机练习、试卷练习、错题复习、自定义组卷、整卷模考。
+- **两种答案时机**：逐题解析，或交卷后统一出解析。
+- **完整闭环**：作答 → 判题 → 解析 → 结果 → 错题入册 → 下一组；中断后能接着上次的进度继续。
+- **错题本与收藏**：到期复习队列、掌握标记、笔记与收藏分离。
+- **统计与备份**：作答统计、最近练习正确率、跨端 `.gkbackup` 备份与恢复（原生端与 Web 端互导已实测）。
+- **细节**：资料分析题图内联排版、深色模式跟随系统、键盘作答与快捷键、模考倒计时与自动交卷。
+- **本地优先**：没有账号体系、没有云同步、没有第三方埋点 SDK（`pubspec.yaml` 里没有 analytics 依赖，代码里没有上报逻辑）。
 
-直接用浏览器打开：
-
-```text
-ui/index.html
-```
-
-或者在本目录运行本地静态服务器：
+## 快速开始
 
 ```bash
-python -m http.server 4174 --directory ui
+git clone <repo>
+cd app
+flutter pub get
+flutter run          # 零配置：debug 构建自动启用内置演示题库（12 道题 / 5 份演示卷）
 ```
 
-然后访问 `http://127.0.0.1:4174/`。
+演示题库是仓库自带的示例题，**只够跑通交互，不是真实题量**。要换成完整题库有两条路：
 
-原型使用 6 道演示题验证交互，不代表生产题库的查询性能和真实题量。界面在题量偏好选择 30 或 50 时仍会显示实际可用的 `1 / 6`，这是演示数据限制。
+**A. 接自己的题库包**（格式见 `release/content-manifest.json`）
 
-## 已验证范围
+```bash
+flutter run --dart-define=CONTENT_MANIFEST_URL=https://your-host/content-manifest.json
+```
 
-浏览器原型已验证：
+首次启动会下载、校验 SHA-256 并安装题库包，之后离线使用。
 
-- 首页、题库、错题、统计、我的五个主区域。
-- 随机、试卷、错题、自定义组卷和整卷模考五类入口。
-- 答题、收藏、跳过、答题卡、交卷和结果。
-- 逐题解析与交卷后解析两种答案时机。
-- 练习恢复、替换确认、计时和自动交卷。
-- 键盘作答、焦点管理和弹层焦点返回。
-- 768 px、390 px、320 px 手机布局与 1440 px 桌面布局。
-- 本地设置持久化、数据导出和进度清除。
-- 页面无横向溢出，主要触控目标不小于 44 px。
+**B. 自己生成题库包**：`tools/import_question_bank.py` 从 JSONL 构建带图的 SQLite 内容库，`tools/build_content_package.py` 负责切片、压缩和清单生成。
 
-完整的逐项证据见 [UI 规范](docs/ui-spec.md#11-本地验收记录)。
+> 需要验证真实下载流程时，用 `--dart-define=KUANGSHUATI_DEMO=false` 关掉演示题库兜底。
 
-## Flutter 手机端
+### Web 端
+
+```bash
+python tools/build_web.py     # 构建 app/build/web，含核心题库
+python tools/serve_web.py     # 默认 http://127.0.0.1:8080，--lan 可让同 Wi-Fi 手机访问
+```
+
+浏览器端用 OPFS + SQLite WASM，**必须带 `Cross-Origin-Opener-Policy: same-origin` 和 `Cross-Origin-Embedder-Policy: require-corp` 响应头**（`serve_web.py` 已带），否则 `crossOriginIsolated` 为 false，数据库 worker 起不来。注意浏览器可能在存储压力下清理 OPFS 数据，重要进度请用备份导出。
+
+## 架构
+
+```text
+ui/          可直接在浏览器打开的移动优先交互原型（HTML/CSS/JS）
+app/         Flutter 客户端（Android 已验证，iOS 仅编译验证）
+  lib/data/content/     内容库读取：分片安装、只读 SQLite、题图 BLOB
+  lib/data/database/    用户数据（作答、错题、收藏、笔记）—— drift，与内容库物理隔离
+  lib/features/         首页 / 题库 / 练习 / 错题 / 统计 / 设置
+tools/       题库导入、内容包构建、发布脚本
+docs/        需求发现、开发文档、UI 规范
+```
+
+几个刻意的取舍：
+
+- **内容库与用户库分离**。题库更新只替换内容库，作答记录不会丢。
+- **题库按 16 MiB 分片下发**。避免把 297 MB 一次性读进内存，也支持并发分片下载（并发数换带宽，实测 24 路 1.54 MB/s vs 2 路 0.27 MB/s）。
+- **不做账号和云同步**。用本地文件备份替代跨设备合并，省掉一整套服务端和隐私面。
+- **不为了显得功能多加社区、排行榜、金币、AI 对话**。
+
+## 测试
 
 ```bash
 cd app
-flutter pub get
-flutter run
+flutter analyze     # 无问题
+flutter test        # 126 个测试通过
 ```
 
-启动时会把 `assets/content/parts/` 中的 19 个分片依次写入应用支持目录，再以只读 SQLite 打开。分片方式避免一次性把约 298 MiB 数据库读入内存。题库更新会替换内容库，用户记录保存在独立的 `kuangshuati_user` 数据库中。
+覆盖组件渲染（含题图内联/块级分流）、数据库、备份恢复、更新包校验、多选题判分、空白题不入错题本、收藏与笔记分离、深色色表切换、演示题库兜底等回归用例。依赖真实题库分片的集成测试在拿不到分片时会自动跳过，所以公开仓库的 CI 不需要私有资源。
 
-Windows 本机跑 `flutter test` 偶发失败、报 `sqlite3.dll` 拒绝访问：这是 native-assets 缓存（`app/.dart_tool/hooks_runner/`、`app/build/native_assets/`）里的 DLL 被残留测试进程占用，属构建缓存问题而非代码问题；关闭残留 `dart.exe`/`flutter_tester.exe` 后重试，或在隔离副本中跑测试即可。
+CI 配置见 `.github/workflows/ci.yml`。
 
-当前已验证：
+## 题库不随附（请先读这条）
 
-- `flutter analyze` 无问题。
-- 50 个本地单元测试全部通过（组件、数据库、真实资产、备份/恢复、更新下载校验，以及多选题判分、空白题不入错题本、收藏/笔记分离、深色色表切换等回归用例）。
-- 真机 真机集成测试通过，实际加载 58,890 道题、515 份试卷。
-- 正式 release APK 已在 真机 冷启动通过，3.2 秒完成首屏并加载全量题库。
-- 题图从 SQLite BLOB 读取并完成 Flutter 图片解码测试。
-- Release APK 约 197 MiB，APK v2 签名与 4 字节对齐验证通过；完整题库分片约 298 MiB。
-- 手机端支持多选题多选判分、跳过本题（含键盘快捷键）、模考剩余时间显示，并跟随系统深色模式自动切换色表。
-- Web 端（`flutter build web -t lib/main_web.dart`，或一键 `python tools/build_web.py`）：浏览器内装入 187 MB 核心题库，六种练习模式全部实测可进入（`artifacts/web-modes-e2e.cjs` 11/11），答题/刷新恢复/错题入册/缓存复用实测通过（`artifacts/web-ui-e2e.cjs` 10/10、`artifacts/web-wrong-e2e.cjs` 7/7、`artifacts/web-e2e.cjs` 5/5）。
-- Web 端备份与恢复：导出触发浏览器真实下载 `.gkbackup`，选回文件后确认弹窗恢复成功（`artifacts/web-backup-e2e.cjs` 8/8）。
-- 跨端备份可互导（已实测，非推断）：`bash artifacts/verify-cross-backup.sh` —— 原生 `dart:io` gzip 产物能被浏览器解开，浏览器 `CompressionStream` 产物能被原生解开，两边均为标准 gzip（magic `1f 8b`）。
+- **本仓库只开源代码，不包含题库数据。** 仓库里没有任何一道真实题目的正文、解析或题图。
+- 完整题库的题目、解析、图片版权归原出处，本项目**没有**获得公开分发授权，因此不随仓库、也不随 Release 分发。
+- 内置的 12 道演示题是自写的示例数据，仅用于跑通交互。
+- 题库基线（题量、去重后的图片数、内容库大小）写在 [docs/development-plan.md](docs/development-plan.md)，供自行构建时对照。
 
-## 当前不包含
+## 已知限制
 
-- iOS 签名、Windows 桌面端发布包和商店上架流程（Windows 本机缺 Visual Studio 构建链，iOS 需 macOS）。
-- 题库公开分发授权和正式 HTTPS 更新源（R2 更新源已搭建，上线发布待确认）。
+- **iOS**：只有编译验证（`.github/workflows/ios-build.yml`），没有签名和真机包。
+- **Windows 桌面**：没有验证过，本机缺 Visual Studio 构建链。
+- **Web 端**：首次要装约 187 MB 核心题库，弱网体验一般；OPFS 可能被浏览器清理。
+- **演示题库**：12 道题，只能验证交互，不能用来评估做题体验。
+- **图片类题目**：题库里 2 张源图缺失，保留缺图状态而不是静默删题。
+- 在 Windows 上跑 `flutter test` 偶发 `sqlite3.dll` 拒绝访问，是 native-assets 构建缓存被残留测试进程占用，关掉残留 `dart.exe`/`flutter_tester.exe` 重试即可。
 
-## 如何运行
+## 文档
 
-- Android：`release/` 目录有签名 APK，直接安装后下载数据包即可。
-- Web：`python tools/build_web.py` 构建并组装 `app/build/web`（含题库与图片），再 `python tools/serve_web.py` 起一个自带 `Cross-Origin-Opener-Policy: same-origin` / `Cross-Origin-Embedder-Policy: require-corp` 响应头的静态服务器（默认 `http://127.0.0.1:8080`，加 `--lan` 可让同 Wi-Fi 的手机访问），首次打开自动下载题库到浏览器。
-  - 不能直接用普通静态服务器：缺这两个头时 `crossOriginIsolated` 为 false，数据库 worker 起不来，题库装不上。
-  - 该服务器本身已实测：`artifacts/web-serve-e2e.cjs` 5/5（`crossOriginIsolated=true` → 题库装载 → 进入练习 → 选答提交出答案）。
-- Windows/iOS：见「当前不包含」。
+| 文件 | 内容 |
+|---|---|
+| [docs/requirements-discovery.md](docs/requirements-discovery.md) | 用户视角需求发现与发布边界 |
+| [docs/development-plan.md](docs/development-plan.md) | 技术架构、数据模型、同步与离线策略、测试 |
+| [docs/ui-spec.md](docs/ui-spec.md) | 信息架构、视觉系统、页面状态、无障碍与验收记录 |
+| [ui/index.html](ui/index.html) | 浏览器可直接打开的交互原型 |
 
-Android APK 的签名、发布和自动更新流程见 [release/README.md](release/README.md)。源码保存在私有仓库，`.github/workflows/android-release.yml` 会把签名 APK 和更新清单发布到公开只读的 S3 兼容对象存储。
+## 许可证
 
-## 题库基线
-
-开发文档基于现有清洗结果：
-
-- 来源 516 套试卷，排除 1 个无题目的模块索引后导入 515 套。
-- 58,890 道题。
-- 39,463 个图片引用，39,196 张去重题图成功导入。
-- 2 张源文件缺失图片保留缺图状态。
-- 原始图片 268,103,439 字节，优化后存储 101,953,886 字节。
-- 最终 SQLite 311,713,792 字节，构建后拆为 19 个 16 MiB 分片。
-
-题库版权授权未确认前，不应公开分发完整数据。
-
-## 关键决策
-
-- Windows、Android、iOS 优先共用 Flutter 业务层和本地 SQLite。
-- Web 使用 OPFS/SQLite WASM，并明确浏览器持久存储可能被清理。
-- 第一版不做账号和云同步，以本地文件备份替代复杂跨设备合并。
-- 不为了“看起来功能多”加入社区、排行榜、金币或 AI 功能。
+代码以 [Apache License 2.0](LICENSE) 发布。题库数据不在许可范围内（见上文）。
