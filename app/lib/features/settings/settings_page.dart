@@ -8,6 +8,7 @@ import '../../shared/widgets/app_widgets.dart';
 import '../content/content_import_service.dart';
 import '../content/content_manager_base.dart';
 import '../content/content_install_page.dart';
+import '../practice/time_budget.dart';
 import 'settings_platform_io.dart'
     if (dart.library.js_interop) 'settings_platform_web.dart';
 
@@ -41,6 +42,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final revealImmediately =
         ref.watch(revealImmediatelyProvider).value ?? true;
     final showTimer = ref.watch(showTimerProvider).value ?? true;
+    final questionTimeLimit =
+        ref.watch(questionTimeLimitProvider).value ?? 0;
     final contentStats = ref.watch(contentStatsProvider);
     final contentManager = ref.watch(contentManagerProvider);
 
@@ -101,6 +104,33 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onChanged: (value) => ref
                     .read(databaseProvider)
                     .setSetting('showTimer', value.toString()),
+              ),
+            ),
+            _SettingTile(
+              icon: Icons.hourglass_bottom,
+              title: '单题限时',
+              subtitle: '练习时显示单题倒计时，临近变橙、超时变红提醒，不强制交卷',
+              trailing: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final choice in questionTimeLimitChoices)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: ChoiceChip(
+                          label: Text(choice == 0 ? '不限' : '$choice秒'),
+                          selected: questionTimeLimit == choice,
+                          visualDensity: VisualDensity.compact,
+                          onSelected: (_) => ref
+                              .read(databaseProvider)
+                              .setSetting(
+                                  'questionTimeLimitSec', choice.toString()),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ],
