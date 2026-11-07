@@ -271,23 +271,11 @@ class ContentPackageService {
     final downloadDirectory = Directory(
       '${temporary.path}${Platform.pathSeparator}content-download',
     );
-    final databaseTarget = File(
-      '${support.path}${Platform.pathSeparator}content.sqlite',
-    );
-    final manifestTarget = File(
-      '${support.path}${Platform.pathSeparator}content-installed.json',
-    );
     final databaseTemporary = File(
       '${support.path}${Platform.pathSeparator}content.sqlite.installing',
     );
     final manifestTemporary = File(
       '${support.path}${Platform.pathSeparator}content-installed.json.installing',
-    );
-    final previousDatabase = File(
-      '${support.path}${Platform.pathSeparator}content.sqlite.previous',
-    );
-    final previousManifest = File(
-      '${support.path}${Platform.pathSeparator}content-installed.json.previous',
     );
 
     await databaseTemporary.deleteIfExists();
@@ -321,30 +309,7 @@ class ContentPackageService {
         }),
         flush: true,
       );
-      await previousDatabase.deleteIfExists();
-      await previousManifest.deleteIfExists();
-      if (await databaseTarget.exists()) {
-        await databaseTarget.rename(previousDatabase.path);
-      }
-      if (await manifestTarget.exists()) {
-        await manifestTarget.rename(previousManifest.path);
-      }
-      try {
-        await databaseTemporary.rename(databaseTarget.path);
-        await manifestTemporary.rename(manifestTarget.path);
-      } on Object {
-        await databaseTarget.deleteIfExists();
-        await manifestTarget.deleteIfExists();
-        if (await previousDatabase.exists()) {
-          await previousDatabase.rename(databaseTarget.path);
-        }
-        if (await previousManifest.exists()) {
-          await previousManifest.rename(manifestTarget.path);
-        }
-        rethrow;
-      }
-      await previousDatabase.deleteIfExists();
-      await previousManifest.deleteIfExists();
+      await promotePreparedInstall(support);
       await downloadDirectory.delete(recursive: true);
       onProgress(1, '题库安装完成');
       return manifest;
@@ -357,6 +322,57 @@ class ContentPackageService {
       await _cleanupSegments(downloadDirectory);
       throw ContentPackageException('安装题库失败：$error');
     }
+  }
+
+  /// 把 support 目录里已准备好的 `content.sqlite.installing` 与
+  /// `content-installed.json.installing` 原子提升为正式安装内容。
+  ///
+  /// 在线下载安装与本地导入（ContentImportService）共用这套落盘协议：
+  /// 旧内容先改名 `.previous` 兑底，再正式改名；中途失败回滚 previous，
+  /// 保证任何时刻磁盘上都有一套完整可用的题库。
+  static Future<void> promotePreparedInstall(Directory support) async {
+    final databaseTarget = File(
+      '${support.path}${Platform.pathSeparator}content.sqlite',
+    );
+    final manifestTarget = File(
+      '${support.path}${Platform.pathSeparator}content-installed.json',
+    );
+    final databaseTemporary = File(
+      '${support.path}${Platform.pathSeparator}content.sqlite.installing',
+    );
+    final manifestTemporary = File(
+      '${support.path}${Platform.pathSeparator}content-installed.json.installing',
+    );
+    final previousDatabase = File(
+      '${support.path}${Platform.pathSeparator}content.sqlite.previous',
+    );
+    final previousManifest = File(
+      '${support.path}${Platform.pathSeparator}content-installed.json.previous',
+    );
+    await previousDatabase.deleteIfExists();
+    await previousManifest.deleteIfExists();
+    if (await databaseTarget.exists()) {
+      await databaseTarget.rename(previousDatabase.path);
+    }
+    if (await manifestTarget.exists()) {
+      await manifestTarget.rename(previousManifest.path);
+    }
+    try {
+      await databaseTemporary.rename(databaseTarget.path);
+      await manifestTemporary.rename(manifestTarget.path);
+    } on Object {
+      await databaseTarget.deleteIfExists();
+      await manifestTarget.deleteIfExists();
+      if (await previousDatabase.exists()) {
+        await previousDatabase.rename(databaseTarget.path);
+      }
+      if (await previousManifest.exists()) {
+        await previousManifest.rename(manifestTarget.path);
+      }
+      rethrow;
+    }
+    await previousDatabase.deleteIfExists();
+    await previousManifest.deleteIfExists();
   }
 
   /// 下载失败后清掉分片缓存：一份没下完的题库包约 140MB，

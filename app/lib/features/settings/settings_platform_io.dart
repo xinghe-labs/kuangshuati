@@ -24,9 +24,9 @@ class SettingsPlatform {
       icon: Icons.backup_outlined,
       title: '备份与恢复',
       subtitle: '导出或恢复练习记录，换机、重装不丢进度',
-      onTap: (context, ref) => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (context) => const BackupPage()),
-      ),
+      onTap: (context, ref) => Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (context) => const BackupPage())),
     ),
   ];
 
@@ -49,8 +49,7 @@ class SettingsPlatform {
   static String get storageNoteTitle => '本机存储';
 
   /// 原生端的存储说明：数据落在本机，可用备份导出。
-  static String get storageNote =>
-      '练习记录只保存在这台设备，可随时导出备份，不联网上传。';
+  static String get storageNote => '练习记录只保存在这台设备，可随时导出备份，不联网上传。';
 }
 
 /// 一个平台专属的设置条目，由设置页统一渲染。
