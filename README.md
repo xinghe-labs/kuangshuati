@@ -21,6 +21,10 @@
 
 <sub>截图来自真机上的 release 构建，不是原型图。</sub>
 
+## 下载安装
+
+不想编译源码？直接从 [Releases](https://github.com/xinghe-labs/kuangshuati/releases) 下载最新 APK 安装（当前 v1.0.8）。首次启动在应用内下载题库（约 145 MB，分片下载、SHA-256 校验），之后全程离线。APK 的 SHA-256 见对应 Release 说明。
+
 ## 它能做什么
 
 - **真离线**：58,890 道题、515 套试卷、39,196 张题图放在本地 SQLite（约 297 MB），装好题库后全程不需要网络。
