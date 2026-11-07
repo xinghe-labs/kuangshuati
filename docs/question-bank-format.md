@@ -14,7 +14,7 @@
 ```json
 {
   "format": "kuangshuati-bank",
-  "formatVersion": 1,
+  "formatVersion": 2,
   "name": "我的题库",
   "contentVersion": "my-bank-2026-02",
   "papers": [ … ],
@@ -25,7 +25,7 @@
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `format` | ✅ | 固定为 `"kuangshuati-bank"` |
-| `formatVersion` | ✅ | 固定为 `1` |
+| `formatVersion` | ✅ | 固定为 `2`（v1 仅多：允许自评题） |
 | `name` | ❌ | 题库显示名，导入完成后展示；缺省用「自定义题库」 |
 | `contentVersion` | ❌ | 内容版本号（设置页「离线题库」里显示）；缺省自动生成 `custom-<时间戳>` |
 | `papers` | ✅ | 试卷数组，至少一份 |
@@ -83,15 +83,14 @@
 | `material` | ❌ | 本题的材料文本（同组题每题各自填写）；缺省无材料 |
 | `stem` | ✅ | 题干 |
 | `stemText` | ❌ | 搜索用的纯文本题干；缺省自动由 `stem` 去掉图片标记生成 |
-| `options` | ✅ | 选项字典：`A/B/C/D/… → 选项文本`，至少一项 |
-| `answer` | ✅ | 正确答案数组，如 `["A"]`、多选 `["A","C"]`；每项必须是 `options` 的键 |
+| `options` | 自评题可省 | 选项字典：`A/B/C/D/… → 选项文本`，至少一项 |
+| `answer` | 自评题可省 | 正确答案数组，如 `["A"]`、多选 `["A","C"]`；每项必须是 `options` 的键 |
 | `solution` | ❌ | 解析；缺省空 |
 
 ## 文本约定
 
 - 纯文本，`\n` 表示换行；**不要**写 HTML。
-- 内嵌图片：在 `stem` / `options` 值 / `material` / `solution` 的任意位置写
-  `[[img:图片ID]]`，导入后渲染为对应图片（见 `docs/question-bank.example.json`）。
+- 内嵌图片：在 `stem` / `options` 值 / `material` / `solution` 的任意位置写  `[[img:图片ID]]`，导入后渲染为对应图片（见 `docs/question-bank.example.json`）。
 
 ## images
 
@@ -115,3 +114,17 @@
 - 导入在本地完成，不联网。
 - 导入后随时可在「离线题库」页重新下载官方题库覆盖回来。
 - 校验失败会指出具体位置（如 `papers[2].questions[5].answer`），不会破坏现有题库。
+
+## v2：自评题（options 与 answer 同时省略）
+
+v2 唯一的扩展：**无客观答案的题（解答题/作文/翻译/案例）可以同时省略 `options` 与
+`answer`**，标记为自评题：
+
+- 只允许双省略：只省略其一是数据错误，校验器会拒绝；
+- 解析（`solution`）照常提供，作为参考答案/评分点；
+- 答题时用户自报"答对/答错"，入库为已提交答案，正确率、错题本、模块统计全链路复用
+  `isCorrect`；
+- `App` 端校验器接受 `formatVersion: 1` 与 `2`（1 与 2 的唯一差异即自评题）；
+- 导入后 `QuestionEntity.options` 为空 map 即自评题，无需额外字段。
+
+典型来源：考研数学/英语的解答题与作文、法硕主观题、二建案例题。
