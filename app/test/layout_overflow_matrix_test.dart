@@ -101,6 +101,12 @@ class _StubContentManager extends ContentManagerBase {
 
   @override
   Future<void> refresh() async {}
+
+  @override
+  Future<void> importBankFile(
+    String path, {
+    void Function(double progress, String stage)? onProgress,
+  }) async {}
 }
 
 void main() {
@@ -133,7 +139,10 @@ void main() {
       );
     }
     await database.toggleFavorite(questions.first.id);
-    await database.setFavoriteNote(questions.first.id, '这是一条比较长的收藏笔记内容，用来测试大字号换行');
+    await database.setFavoriteNote(
+      questions.first.id,
+      '这是一条比较长的收藏笔记内容，用来测试大字号换行',
+    );
   }
 
   final pages = <String, Widget>{
@@ -169,9 +178,7 @@ void main() {
             ProviderScope(
               overrides: [
                 databaseProvider.overrideWithValue(database),
-                contentRepositoryProvider.overrideWithValue(
-                  repository,
-                ),
+                contentRepositoryProvider.overrideWithValue(repository),
                 contentManagerProvider.overrideWith(
                   (ref) => _StubContentManager(repository),
                 ),

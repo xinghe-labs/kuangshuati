@@ -40,4 +40,14 @@ abstract class ContentManagerBase extends ChangeNotifier {
 
   /// 仅在用户主动点「检查更新」时调用。
   Future<void> refresh();
+
+  /// 从本地 JSON 文件导入自制题库，替换当前题库。
+  ///
+  /// 进度通过 [onProgress] 回调（0~1 与阶段文案），供设置页弹窗展示；
+  /// 失败抛 ContentImportException（message 已是用户可读文案）。
+  /// Web 端不支持本地导入，抛 UnsupportedError。
+  Future<void> importBankFile(
+    String path, {
+    void Function(double progress, String stage)? onProgress,
+  });
 }
