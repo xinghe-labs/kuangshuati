@@ -54,6 +54,7 @@ dependencies:
   # Keeps Android on the stable platform-channel implementation instead of
   # the JNI CMake toolchain currently failing under AGP 9.
   path_provider_android: 2.2.10
+  file_picker: ^13.3.2
 
 dev_dependencies:
   flutter_test:

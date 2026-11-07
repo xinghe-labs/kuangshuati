@@ -1,0 +1,63 @@
+{
+  "format": "kuangshuati-bank",
+  "formatVersion": 1,
+  "name": "示例题库",
+  "contentVersion": "example-2026-02",
+  "papers": [
+    {
+      "id": "example-2026-xingce",
+      "title": "2026 年示例行测卷",
+      "year": 2026,
+      "region": "国家",
+      "paperType": "行测",
+      "durationSeconds": 7200,
+      "questions": [
+        {
+          "id": "ex-q-0001",
+          "module": "常识判断",
+          "type": "单选",
+          "questionNo": 1,
+          "stem": "下列关于『狂刷题』的说法，正确的是：",
+          "options": {
+            "A": "需要注册账号才能刷题",
+            "B": "做题全程离线可用",
+            "C": "作答记录会上传到云端",
+            "D": "仅支持在线练习"
+          },
+          "answer": ["B"],
+          "solution": "狂刷题不注册、不登录、不埋点，题库安装后做题全程离线可用。\n故选 B。"
+        },
+        {
+          "id": "ex-q-0002",
+          "module": "判断推理",
+          "type": "单选",
+          "questionNo": 2,
+          "groupId": "ex-grp-1",
+          "material": "根据以下统计图回答第 2～3 题：\n[[img:ex-tu-1]]",
+          "stem": "图中 2025 年的数值是：",
+          "options": { "A": "10", "B": "20", "C": "30", "D": "40" },
+          "answer": ["C"],
+          "solution": "直接读图，2025 年对应数值为 30。故选 C。"
+        },
+        {
+          "id": "ex-q-0003",
+          "module": "判断推理",
+          "type": "单选",
+          "questionNo": 3,
+          "groupId": "ex-grp-1",
+          "material": "根据以下统计图回答第 2～3 题：\n[[img:ex-tu-1]]",
+          "stem": "若 2026 年数值在 2025 年基础上翻倍，则为：",
+          "options": { "A": "30", "B": "50", "C": "60", "D": "90" },
+          "answer": ["C"],
+          "solution": "30 × 2 = 60。故选 C。"
+        }
+      ]
+    }
+  ],
+  "images": {
+    "ex-tu-1": {
+      "mime": "image/png",
+      "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+    }
+  }
+}

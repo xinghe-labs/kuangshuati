@@ -165,6 +165,15 @@ class WebContentManager extends ContentManagerBase {
   @override
   Future<void> refresh() => checkForManifest(silent: true);
 
+  @override
+  Future<void> importBankFile(
+    String path, {
+    void Function(double progress, String stage)? onProgress,
+  }) async {
+    // Web 端题库由服务端托管（OPFS/IndexedDB），不支持本地文件导入。
+    throw UnsupportedError('Web 端暂不支持导入本地题库文件');
+  }
+
   Future<void>? _installFuture;
 
   @override

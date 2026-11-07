@@ -1,9 +1,12 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../content/content_import_service.dart';
+import '../content/content_manager_base.dart';
 import '../content/content_install_page.dart';
 import 'settings_platform_io.dart'
     if (dart.library.js_interop) 'settings_platform_web.dart';
@@ -128,6 +131,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
             ),
             _divider,
+            _SettingTile(
+              icon: Icons.upload_file_outlined,
+              title: '导入题库',
+              subtitle: '从本地 JSON 文件导入自制题库，替换当前题库',
+              trailing: const Icon(Icons.chevron_right, size: 20),
+              onTap: () => _importQuestionBank(),
+            ),
+            _divider,
             for (final action in SettingsPlatform.dataActions()) ...[
               _SettingTile(
                 icon: action.icon,
@@ -190,6 +201,115 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ),
       ],
     );
+  }
+
+  /// 导入本地题库 JSON：选文件 → 确认 → 不可关进度弹窗 → 结果提示。
+  /// 仓库切换由 ContentManager 完成，首页统计随 provider 自动刷新。
+  Future<void> _importQuestionBank() async {
+    final manager = ref.read(contentManagerProvider);
+    if (manager.phase == ContentManagerPhase.downloading) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('题库正在下载或导入中，请稍候')));
+      return;
+    }
+    final picked = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+    final platformFile = picked.singleOrNull;
+    final path = platformFile?.path;
+    if (platformFile == null || path == null) return; // 用户取消
+    if (!mounted) return;
+    final fileSize = platformFile.lengthSync() ?? 0;
+    final sizeLabel = fileSize >= 1024 * 1024
+        ? '${(fileSize / 1024 / 1024).toStringAsFixed(1)} MB'
+        : '${(fileSize / 1024).toStringAsFixed(0)} KB';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('导入题库'),
+        content: Text(
+          '将从「${platformFile.name}」（$sizeLabel）导入并替换当前题库。'
+          '练习记录、错题本和统计不受影响。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('导入'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    final progressNotifier = ValueNotifier<(double, String)>((0, '正在准备导入'));
+    try {
+      final future = manager.importBankFile(
+        path,
+        onProgress: (progress, stage) {
+          progressNotifier.value = (progress, stage);
+        },
+      );
+      // 进度弹窗不可关闭：导入中替换文件有竞争风险。
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => PopScope<bool>(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('正在导入题库'),
+            content: ValueListenableBuilder<(double, String)>(
+              valueListenable: progressNotifier,
+              builder: (context, value, child) => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(value.$2),
+                  const SizedBox(height: 14),
+                  LinearProgressIndicator(
+                    value: value.$1 <= 0 ? null : value.$1,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      try {
+        await future;
+        if (!mounted) return;
+        Navigator.of(context).pop(); // 关进度弹窗
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ref.read(contentManagerProvider).stage)),
+        );
+      } on ContentImportException catch (error) {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      } on UnsupportedError {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('当前平台不支持导入本地题库文件')));
+      } on Object {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('题库导入失败，请重试')));
+      }
+    } finally {
+      progressNotifier.dispose();
+    }
   }
 
   Future<void> _confirmClearData() async {

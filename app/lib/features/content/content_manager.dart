@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../data/content/content_repository.dart';
 import '../../data/content/full_content_repository.dart';
 import '../../data/content/seed_content_repository.dart';
+import 'content_import_service.dart';
 import 'content_manager_base.dart';
 import 'content_package_service.dart';
 
@@ -26,6 +27,9 @@ const bool kDemoContentFallback = bool.fromEnvironment(
 /// 只会让用户困惑（还会暴露本机代理端口），而真正需要它的人只看日志。
 String friendlyContentError(Object error) {
   if (error is ContentPackageException) {
+    return error.message;
+  }
+  if (error is ContentImportException) {
     return error.message;
   }
   if (error is SocketException ||
@@ -301,6 +305,76 @@ class ContentManager extends ContentManagerBase {
       _rememberError(error);
     }
     notifyListeners();
+  }
+
+  /// 从本地 JSON 导入自制题库。安装与下载共用同一套原子落盘，
+  /// 失败时旧题库完好；成功后当前仓库切到新题库。
+  @override
+  Future<void> importBankFile(
+    String path, {
+    void Function(double progress, String stage)? onProgress,
+  }) async {
+    // 与下载互斥：两边都在改同一套 content.sqlite* 文件。
+    if (_phase == ContentManagerPhase.downloading) {
+      throw const ContentImportException('题库正在下载或导入中，请稍候');
+    }
+    // 注意：不提前 close 旧仓库。导入期间 repositoryProvider 会随进度通知
+    // 重新解析，首页还在 watch 它；旧连接保持打开，新库装好后才切换。
+    _phase = ContentManagerPhase.downloading;
+    _progress = 0;
+    _stage = '正在准备导入';
+    _errorMessage = null;
+    notifyListeners();
+    FullContentRepository? opened;
+    try {
+      final summary =
+          await ContentImportService(
+            supportDirectory: _supportDirectory,
+          ).importFromFile(
+            path,
+            onProgress: (progress, stage) {
+              _progress = progress;
+              _stage = stage;
+              notifyListeners();
+            },
+          );
+      opened = await FullContentRepository.openInstalled(
+        supportDirectory: _supportDirectory,
+      );
+      final previous = _fullRepository;
+      _fullRepository = opened;
+      _repository = opened;
+      previous?.close();
+      _installedManifest = await _service.readInstalledManifest();
+      _progress = 1;
+      _demoFallback = false;
+      _phase = ContentManagerPhase.ready;
+      _stage = '题库导入完成：${summary.questionCount} 题 / ${summary.paperCount} 份卷子';
+      notifyListeners();
+    } on Object catch (error) {
+      _rememberError(error);
+      if (opened != null) {
+        try {
+          opened.close();
+        } on Object catch (closeError) {
+          debugPrint('导入失败后关闭新库连接出错：$closeError');
+        }
+      }
+      // 安装是原子的：失败时旧题库文件与旧连接都完好，直接回滚。
+      if (_fullRepository != null) {
+        _repository = _fullRepository!;
+        _phase = ContentManagerPhase.ready;
+        _stage = '导入失败，继续使用原题库';
+      } else {
+        _repository = _seedRepository;
+        _phase = ContentManagerPhase.failed;
+        _stage = '题库导入失败';
+      }
+      notifyListeners();
+      // 把原始异常抛给调用方（设置页拿 message 弹提示）。
+      if (error is ContentImportException) rethrow;
+      throw ContentImportException(friendlyContentError(error));
+    }
   }
 
   @override
