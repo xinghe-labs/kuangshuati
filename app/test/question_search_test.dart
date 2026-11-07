@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kuangshuati/data/content/full_content_repository.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -8,6 +10,12 @@ import 'package:sqlite3/sqlite3.dart';
 /// 标题和地区。用户想找回“做错过的那道题”时，按题干搜得到 0 条结果，只能
 /// 一份份试卷点进去翻。
 void main() {
+  // 题库不随仓库分发：拿不到 content.sqlite 时整组跳过，避免公开仓库的
+  // CI 因为缺少私有题库资源而变红。
+  if (!File('assets/content/content.sqlite').existsSync()) {
+    test('缺少题库，跳过', () {}, skip: '未提供 assets/content/content.sqlite');
+    return;
+  }
   const databasePath =
       'assets/content/content.sqlite';
 
