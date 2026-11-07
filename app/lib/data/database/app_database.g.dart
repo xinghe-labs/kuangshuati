@@ -1427,6 +1427,21 @@ class $SessionAnswersTable extends SessionAnswers
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _dailyCountedMeta = const VerificationMeta(
+    'dailyCounted',
+  );
+  @override
+  late final GeneratedColumn<bool> dailyCounted = GeneratedColumn<bool>(
+    'daily_counted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("daily_counted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     sessionId,
@@ -1438,6 +1453,7 @@ class $SessionAnswersTable extends SessionAnswers
     durationMs,
     answeredAt,
     moduleCounted,
+    dailyCounted,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1515,6 +1531,15 @@ class $SessionAnswersTable extends SessionAnswers
         ),
       );
     }
+    if (data.containsKey('daily_counted')) {
+      context.handle(
+        _dailyCountedMeta,
+        dailyCounted.isAcceptableOrUnknown(
+          data['daily_counted']!,
+          _dailyCountedMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1560,6 +1585,10 @@ class $SessionAnswersTable extends SessionAnswers
         DriftSqlType.bool,
         data['${effectivePrefix}module_counted'],
       )!,
+      dailyCounted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}daily_counted'],
+      )!,
     );
   }
 
@@ -1579,11 +1608,27 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
   final int durationMs;
   final int? answeredAt;
 
-  /// 这道题是否已经在提交那一刻实时计入过「模块统计」。
+  /// 这道题是否已经计入过「模块统计」（题数 + 正确数）。
+  ///
   /// 练习模式（答完立刻出答案）在 saveAnswer 里就累计了模块，
   /// 交卷时必须跳过它，否则同一题会被算两次；
   /// 模考/交卷后统一判分的题在交卷时才算，标记后同样不会重复。
+  ///
+  /// 注意它必须保持单调（一旦 true 不再回 false）：saveAnswer 用
+  /// insertOnConflictUpdate 整行覆盖，未提交的保存不能把它洗回 false，
+  /// 否则交卷时会重复累加。
   final bool moduleCounted;
+
+  /// 这道题是否已经计入过「当日统计」（已答 / 正确 / 用时 / 连续天数）。
+  ///
+  /// 模考和“关闭立即出答案”的练习模式下，用户每选一个选项就落库一次
+  /// （submitted=false、isCorrect=null），这一次已经算了一题「已答」；
+  /// 交卷时 finalizeSession 又把「选过选项但没提交」的题再算一遍，
+  /// 于是同一题被记两次：答了 20 题的模考，首页写「今日已答 40」。
+  ///
+  /// 与 moduleCounted 不同，模块统计要等“判过分”才算，当日已答只要
+  /// 选过就算，所以两者不能用同一个标记。
+  final bool dailyCounted;
   const SessionAnswer({
     required this.sessionId,
     required this.questionId,
@@ -1594,6 +1639,7 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
     required this.durationMs,
     this.answeredAt,
     required this.moduleCounted,
+    required this.dailyCounted,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1611,6 +1657,7 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
       map['answered_at'] = Variable<int>(answeredAt);
     }
     map['module_counted'] = Variable<bool>(moduleCounted);
+    map['daily_counted'] = Variable<bool>(dailyCounted);
     return map;
   }
 
@@ -1629,6 +1676,7 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
           ? const Value.absent()
           : Value(answeredAt),
       moduleCounted: Value(moduleCounted),
+      dailyCounted: Value(dailyCounted),
     );
   }
 
@@ -1647,6 +1695,7 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
       durationMs: serializer.fromJson<int>(json['durationMs']),
       answeredAt: serializer.fromJson<int?>(json['answeredAt']),
       moduleCounted: serializer.fromJson<bool>(json['moduleCounted']),
+      dailyCounted: serializer.fromJson<bool>(json['dailyCounted']),
     );
   }
   @override
@@ -1662,6 +1711,7 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
       'durationMs': serializer.toJson<int>(durationMs),
       'answeredAt': serializer.toJson<int?>(answeredAt),
       'moduleCounted': serializer.toJson<bool>(moduleCounted),
+      'dailyCounted': serializer.toJson<bool>(dailyCounted),
     };
   }
 
@@ -1675,6 +1725,7 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
     int? durationMs,
     Value<int?> answeredAt = const Value.absent(),
     bool? moduleCounted,
+    bool? dailyCounted,
   }) => SessionAnswer(
     sessionId: sessionId ?? this.sessionId,
     questionId: questionId ?? this.questionId,
@@ -1685,6 +1736,7 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
     durationMs: durationMs ?? this.durationMs,
     answeredAt: answeredAt.present ? answeredAt.value : this.answeredAt,
     moduleCounted: moduleCounted ?? this.moduleCounted,
+    dailyCounted: dailyCounted ?? this.dailyCounted,
   );
   SessionAnswer copyWithCompanion(SessionAnswersCompanion data) {
     return SessionAnswer(
@@ -1707,6 +1759,9 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
       moduleCounted: data.moduleCounted.present
           ? data.moduleCounted.value
           : this.moduleCounted,
+      dailyCounted: data.dailyCounted.present
+          ? data.dailyCounted.value
+          : this.dailyCounted,
     );
   }
 
@@ -1721,7 +1776,8 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
           ..write('uncertain: $uncertain, ')
           ..write('durationMs: $durationMs, ')
           ..write('answeredAt: $answeredAt, ')
-          ..write('moduleCounted: $moduleCounted')
+          ..write('moduleCounted: $moduleCounted, ')
+          ..write('dailyCounted: $dailyCounted')
           ..write(')'))
         .toString();
   }
@@ -1737,6 +1793,7 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
     durationMs,
     answeredAt,
     moduleCounted,
+    dailyCounted,
   );
   @override
   bool operator ==(Object other) =>
@@ -1750,7 +1807,8 @@ class SessionAnswer extends DataClass implements Insertable<SessionAnswer> {
           other.uncertain == this.uncertain &&
           other.durationMs == this.durationMs &&
           other.answeredAt == this.answeredAt &&
-          other.moduleCounted == this.moduleCounted);
+          other.moduleCounted == this.moduleCounted &&
+          other.dailyCounted == this.dailyCounted);
 }
 
 class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
@@ -1763,6 +1821,7 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
   final Value<int> durationMs;
   final Value<int?> answeredAt;
   final Value<bool> moduleCounted;
+  final Value<bool> dailyCounted;
   final Value<int> rowid;
   const SessionAnswersCompanion({
     this.sessionId = const Value.absent(),
@@ -1774,6 +1833,7 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
     this.durationMs = const Value.absent(),
     this.answeredAt = const Value.absent(),
     this.moduleCounted = const Value.absent(),
+    this.dailyCounted = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SessionAnswersCompanion.insert({
@@ -1786,6 +1846,7 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
     this.durationMs = const Value.absent(),
     this.answeredAt = const Value.absent(),
     this.moduleCounted = const Value.absent(),
+    this.dailyCounted = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : sessionId = Value(sessionId),
        questionId = Value(questionId);
@@ -1799,6 +1860,7 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
     Expression<int>? durationMs,
     Expression<int>? answeredAt,
     Expression<bool>? moduleCounted,
+    Expression<bool>? dailyCounted,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1811,6 +1873,7 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
       if (durationMs != null) 'duration_ms': durationMs,
       if (answeredAt != null) 'answered_at': answeredAt,
       if (moduleCounted != null) 'module_counted': moduleCounted,
+      if (dailyCounted != null) 'daily_counted': dailyCounted,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1825,6 +1888,7 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
     Value<int>? durationMs,
     Value<int?>? answeredAt,
     Value<bool>? moduleCounted,
+    Value<bool>? dailyCounted,
     Value<int>? rowid,
   }) {
     return SessionAnswersCompanion(
@@ -1837,6 +1901,7 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
       durationMs: durationMs ?? this.durationMs,
       answeredAt: answeredAt ?? this.answeredAt,
       moduleCounted: moduleCounted ?? this.moduleCounted,
+      dailyCounted: dailyCounted ?? this.dailyCounted,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1871,6 +1936,9 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
     if (moduleCounted.present) {
       map['module_counted'] = Variable<bool>(moduleCounted.value);
     }
+    if (dailyCounted.present) {
+      map['daily_counted'] = Variable<bool>(dailyCounted.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1889,6 +1957,7 @@ class SessionAnswersCompanion extends UpdateCompanion<SessionAnswer> {
           ..write('durationMs: $durationMs, ')
           ..write('answeredAt: $answeredAt, ')
           ..write('moduleCounted: $moduleCounted, ')
+          ..write('dailyCounted: $dailyCounted, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4447,6 +4516,7 @@ typedef $$SessionAnswersTableCreateCompanionBuilder =
       Value<int> durationMs,
       Value<int?> answeredAt,
       Value<bool> moduleCounted,
+      Value<bool> dailyCounted,
       Value<int> rowid,
     });
 typedef $$SessionAnswersTableUpdateCompanionBuilder =
@@ -4460,6 +4530,7 @@ typedef $$SessionAnswersTableUpdateCompanionBuilder =
       Value<int> durationMs,
       Value<int?> answeredAt,
       Value<bool> moduleCounted,
+      Value<bool> dailyCounted,
       Value<int> rowid,
     });
 
@@ -4514,6 +4585,11 @@ class $$SessionAnswersTableFilterComposer
 
   ColumnFilters<bool> get moduleCounted => $composableBuilder(
     column: $table.moduleCounted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get dailyCounted => $composableBuilder(
+    column: $table.dailyCounted,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -4571,6 +4647,11 @@ class $$SessionAnswersTableOrderingComposer
     column: $table.moduleCounted,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get dailyCounted => $composableBuilder(
+    column: $table.dailyCounted,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SessionAnswersTableAnnotationComposer
@@ -4618,6 +4699,11 @@ class $$SessionAnswersTableAnnotationComposer
     column: $table.moduleCounted,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get dailyCounted => $composableBuilder(
+    column: $table.dailyCounted,
+    builder: (column) => column,
+  );
 }
 
 class $$SessionAnswersTableTableManager
@@ -4662,6 +4748,7 @@ class $$SessionAnswersTableTableManager
                 Value<int> durationMs = const Value.absent(),
                 Value<int?> answeredAt = const Value.absent(),
                 Value<bool> moduleCounted = const Value.absent(),
+                Value<bool> dailyCounted = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SessionAnswersCompanion(
                 sessionId: sessionId,
@@ -4673,6 +4760,7 @@ class $$SessionAnswersTableTableManager
                 durationMs: durationMs,
                 answeredAt: answeredAt,
                 moduleCounted: moduleCounted,
+                dailyCounted: dailyCounted,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -4686,6 +4774,7 @@ class $$SessionAnswersTableTableManager
                 Value<int> durationMs = const Value.absent(),
                 Value<int?> answeredAt = const Value.absent(),
                 Value<bool> moduleCounted = const Value.absent(),
+                Value<bool> dailyCounted = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SessionAnswersCompanion.insert(
                 sessionId: sessionId,
@@ -4697,6 +4786,7 @@ class $$SessionAnswersTableTableManager
                 durationMs: durationMs,
                 answeredAt: answeredAt,
                 moduleCounted: moduleCounted,
+                dailyCounted: dailyCounted,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
