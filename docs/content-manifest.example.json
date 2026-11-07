@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "platform": "android",
+  "format": "sqlite-gzip",
+  "contentVersion": "2026-10-25",
+  "minimumAppVersionCode": 3,
+  "questionCount": 58890,
+  "paperCount": 515,
+  "imageCount": 39196,
+  "databaseBytes": 311713792,
+  "databaseSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "packageUrl": "https://content.example.com/kuangshuati-content-2026-10-25.sqlite.gz",
+  "packageBytes": 144933854,
+  "packageSha256": "0000000000000000000000000000000000000000000000000000000000000000"
+}

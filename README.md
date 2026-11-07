@@ -21,6 +21,10 @@
 
 <sub>截图来自真机上的 release 构建，不是原型图。</sub>
 
+## 下载安装
+
+不想编译源码？直接从 [Releases](https://github.com/xinghe-labs/kuangshuati/releases) 下载最新 APK 安装（当前 v1.0.8）。首次启动在应用内下载题库（约 145 MB，分片下载、SHA-256 校验），之后全程离线。APK 的 SHA-256 见对应 Release 说明。
+
 ## 它能做什么
 
 - **真离线**：58,890 道题、515 套试卷、39,196 张题图放在本地 SQLite（约 297 MB），装好题库后全程不需要网络。
@@ -38,12 +42,12 @@
 git clone <repo>
 cd app
 flutter pub get
-flutter run          # 零配置：debug 构建自动启用内置演示题库（12 道题 / 5 份演示卷）
+flutter run          # 首次启动自动下载并安装题库（约 145 MB），之后全程离线
 ```
 
-演示题库是仓库自带的示例题，**只够跑通交互，不是真实题量**。要换成完整题库有两条路：
+题库默认从作者的内容源拉取（地址即 `app/lib/features/content/content_package_service.dart` 里 `CONTENT_MANIFEST_URL` 的默认值）。要换成自己的题库有两条路：
 
-**A. 接自己的题库包**（格式见 `release/content-manifest.json`）
+**A. 指向自己的清单**（清单格式见 [`docs/content-manifest.example.json`](docs/content-manifest.example.json)，其中的 SHA-256 是全零占位，填你自己包的真值）
 
 ```bash
 flutter run --dart-define=CONTENT_MANIFEST_URL=https://your-host/content-manifest.json
@@ -53,7 +57,7 @@ flutter run --dart-define=CONTENT_MANIFEST_URL=https://your-host/content-manifes
 
 **B. 自己生成题库包**：`tools/import_question_bank.py` 从 JSONL 构建带图的 SQLite 内容库，`tools/build_content_package.py` 负责切片、压缩和清单生成。
 
-> 需要验证真实下载流程时，用 `--dart-define=KUANGSHUATI_DEMO=false` 关掉演示题库兜底。
+> 拿不到题库时（离线、或下载失败），debug 构建会回落到内置的 12 道演示题，方便先把交互跑通；`--dart-define=KUANGSHUATI_DEMO=false` 可关掉这个兜底。
 
 ### Web 端
 
@@ -95,10 +99,10 @@ flutter test        # 126 个测试通过
 
 CI 配置见 `.github/workflows/ci.yml`。
 
-## 题库不随附（请先读这条）
+## 题库来源与授权（请先读这条）
 
 - **本仓库只开源代码，不包含题库数据。** 仓库里没有任何一道真实题目的正文、解析或题图。
-- 完整题库的题目、解析、图片版权归原出处，本项目**没有**获得公开分发授权，因此不随仓库、也不随 Release 分发。
+- App 首次启动从作者的内容源下载题库包（约 145 MB，按 16 MiB 分片）。题目为公考真题的网友回忆整理，题目与解析的权利归原出处；**本项目未取得原出处的公开分发授权**，题库仅以个人学习用途提供给 App 下载，请勿转售或再分发。
 - 内置的 12 道演示题是自写的示例数据，仅用于跑通交互。
 - 题库基线（题量、去重后的图片数、内容库大小）写在 [docs/development-plan.md](docs/development-plan.md)，供自行构建时对照。
 
