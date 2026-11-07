@@ -1,0 +1,16 @@
+---
+# pi-lens 对 YAML 编辑会自动跑 yamllint（无配置时用默认规则）。
+#
+# Dart 项目的 pubspec.yaml / pubspec.lock 由 `flutter pub` 自动维护：
+# - 模板自带的注释行和 sqlite3 源 URL 无法折行（URL 是语法的一部分）；
+# - Windows 检出默认 CRLF，行尾也不该被 lint 卡住。
+# 这两个文件交给 Dart 工具链，不参与 YAML lint。其余 YAML 照默认规则。
+#
+# 注意文件名必须是点前缀：yamllint 二进制只自动发现
+# .yamllint / .yamllint.yaml / .yamllint.yml（非点前缀的 yamllint.yaml 不算）。
+extends: default
+ignore: |
+  app/pubspec.yaml
+  app/pubspec.lock
+  **/pubspec.yaml
+  **/pubspec.lock
