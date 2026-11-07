@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +13,7 @@ import '../practice/practice_launcher.dart';
 import '../practice/time_budget.dart';
 import '../settings/settings_platform_io.dart'
     if (dart.library.js_interop) '../settings/settings_platform_web.dart';
+import '../widget/home_widget_sync.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -25,13 +28,34 @@ class _HomePageState extends ConsumerState<HomePage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) SettingsPlatform.autoCheckUpdate(context, ref);
+      // 冷启动先同步一次桌面小组件（统计流可能从启动起就没变化）。
+      _syncHomeWidget();
     });
+  }
+
+  /// 今日答题数或连续天数变化时刷新桌面小组件。
+  ///
+  /// 两个统计流任一推送都会走到这里；另一方还在加载就跳过，
+  /// 等它的下一次推送再补上（syncHomeWidget 幂等、失败静默）。
+  void _syncHomeWidget() {
+    final daily = ref.read(dailyStatsProvider);
+    final streak = ref.read(practiceStreakProvider);
+    final todayKey = _dayKey(DateTime.now());
+    final todayCount = daily.value
+        ?.where((item) => item.day == todayKey)
+        .fold(0, (sum, item) => sum + item.answeredCount);
+    final streakDays = streak.value?.currentDays;
+    if (todayCount == null || streakDays == null) return;
+    unawaited(syncHomeWidget(todayCount: todayCount, streakDays: streakDays));
   }
 
   @override
   Widget build(BuildContext context) {
     final activeSession = ref.watch(latestActiveSessionProvider);
     final reviews = ref.watch(reviewItemsProvider);
+    // 统计流每次推送（含会话提交后）都顺带刷新桌面小组件。
+    ref.listen(dailyStatsProvider, (_, _) => _syncHomeWidget());
+    ref.listen(practiceStreakProvider, (_, _) => _syncHomeWidget());
     final daily = ref.watch(dailyStatsProvider);
     final now = DateTime.now();
     final todayKey = _dayKey(now);

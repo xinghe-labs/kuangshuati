@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_today_count">今日 %1$d 题</string>
+    <string name="widget_streak_days">连续练习 %1$d 天</string>
+</resources>
