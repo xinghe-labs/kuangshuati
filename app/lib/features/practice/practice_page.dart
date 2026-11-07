@@ -12,6 +12,7 @@ import '../../data/database/app_database.dart' as db;
 import '../../data/database/session_answer_extensions.dart';
 import '../../domain/models.dart' as domain;
 import '../../shared/widgets/rich_content.dart';
+import 'time_budget.dart';
 
 class PracticePage extends ConsumerStatefulWidget {
   const PracticePage({required this.sessionId, super.key});
@@ -364,6 +365,13 @@ class _PracticePageState extends ConsumerState<PracticePage>
                       ),
                   ],
                 ),
+                _timeHintsRow(
+                  context,
+                  question,
+                  deadline == null
+                      ? null
+                      : DateTime.fromMillisecondsSinceEpoch(deadline),
+                ),
                 const SizedBox(height: 14),
                 if (question.material != null)
                   Container(
@@ -685,8 +693,9 @@ class _PracticePageState extends ConsumerState<PracticePage>
       uncertain: _uncertain.contains(question.id),
       durationMs: duration,
       answeredAt: DateTime.now().millisecondsSinceEpoch,
-      // 页面内的临时副本，只用于渲染；真正计入模块统计的是数据库行。
+      // 页面内的临时副本，只用于渲染；真正计入统计的是数据库行。
       moduleCounted: false,
+      dailyCounted: false,
     );
     await ref
         .read(databaseProvider)
@@ -1026,6 +1035,96 @@ class _PracticePageState extends ConsumerState<PracticePage>
       },
     );
     if (picked != null) await _goTo(picked);
+  }
+
+  // 限时训练的第二行状态条：单题倒计时（设置开启时）+ 模考分模块
+  // 时间预算（整卷时长按模块题数分摊）。都只提醒不强制——行测
+  // 考生有自己的做题策略，页面负责把「快没时间了」喊出来。
+  Widget _timeHintsRow(
+    BuildContext context,
+    domain.QuestionContent question,
+    DateTime? deadline,
+  ) {
+    final questionTimeLimit = ref.watch(questionTimeLimitProvider).value ?? 0;
+    final showQuestionLimit = questionTimeLimit > 0;
+    final moduleBudgets = deadline == null
+        ? null
+        : moduleBudgetsSeconds(
+            totalBudgetSeconds: _session?.timeLimitSeconds ?? 0,
+            questionCountByModule: _moduleQuestionCounts(),
+          );
+    final moduleBudget = moduleBudgets?[question.module] ?? 0;
+    final showModuleBudget = moduleBudget > 0;
+    if (!showQuestionLimit && !showModuleBudget) {
+      return const SizedBox.shrink();
+    }
+    final questionMs = _currentQuestionDurationMs;
+    final limit = questionLimitPresentation(
+      ((questionTimeLimit * 1000 - questionMs) / 1000).floor(),
+      questionTimeLimit,
+    );
+    final moduleElapsedMs = showModuleBudget
+        ? _moduleElapsedMs(question.module, question.id) + questionMs
+        : 0;
+    final overBudgetSec = moduleElapsedMs ~/ 1000 - moduleBudget;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        children: [
+          if (showModuleBudget)
+            Text(
+              overBudgetSec >= 0
+                  ? '${question.module} 已超 ${formatLimitClock(overBudgetSec)}'
+                  : '${question.module} ${formatLimitClock(moduleElapsedMs ~/ 1000)} / ${formatLimitClock(moduleBudget)}',
+              style: TextStyle(
+                color: overBudgetSec >= 0 ? AppColors.negative : AppColors.ink,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          const Spacer(),
+          if (showQuestionLimit)
+            Text(
+              limit.label,
+              style: TextStyle(
+                color: limit.over
+                    ? AppColors.negative
+                    : limit.warn
+                        ? AppColors.warning
+                        : AppColors.ink,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Map<String, int> _moduleQuestionCounts() {
+    final counts = <String, int>{};
+    for (final row in _rows) {
+      final module = _questions[row.questionId]?.module;
+      if (module == null) continue;
+      counts.update(module, (value) => value + 1, ifAbsent: () => 1);
+    }
+    return counts;
+  }
+
+  // 本模块已花时间：已完成各题的累计用时 + 当前题的实时用时。
+  // 当前题不取 _questionBaseDurations（那是上次保存值，不含最近几秒），
+  // 而是用 _currentQuestionDurationMs 的实时值，避免双重计入。
+  int _moduleElapsedMs(String module, String currentQuestionId) {
+    var total = 0;
+    for (final row in _rows) {
+      if (_questions[row.questionId]?.module != module) continue;
+      if (row.questionId == currentQuestionId) continue;
+      total += _questionBaseDurations[row.questionId] ?? 0;
+    }
+    return total;
   }
 
   String _formatDuration(int milliseconds) {

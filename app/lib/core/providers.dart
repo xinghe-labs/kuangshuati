@@ -125,6 +125,14 @@ final showTimerProvider = StreamProvider<bool>((ref) {
       .map((value) => value != 'false');
 });
 
+/// 单题限时（秒）。0 = 不限时（默认）。存 settings 表。
+final questionTimeLimitProvider = StreamProvider<int>((ref) {
+  return ref
+      .watch(databaseProvider)
+      .watchSetting('questionTimeLimitSec')
+      .map((value) => value == null ? 0 : int.tryParse(value) ?? 0);
+});
+
 /// 一条「最近练习」记录：会话本身 + 作答概况。
 class RecentSessionEntry {
   const RecentSessionEntry({required this.session, required this.summary});
