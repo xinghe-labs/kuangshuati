@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kuangshuati/data/content/full_content_repository.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -8,6 +10,12 @@ import 'package:sqlite3/sqlite3.dart';
 /// 每次点“顺序练习”拿到的都是题库最前面那 100 题；题库共 58890 题，
 /// 用户练完一遍后再点还是同一批，既做不完题库，也分不清是不是自己没进度。
 void main() {
+  // 题库不随仓库分发：拿不到 content.sqlite 时整组跳过，避免公开仓库的
+  // CI 因为缺少私有题库资源而变红。
+  if (!File('assets/content/content.sqlite').existsSync()) {
+    test('缺少题库，跳过', () {}, skip: '未提供 assets/content/content.sqlite');
+    return;
+  }
   late Database database;
   late FullContentRepository repository;
 
