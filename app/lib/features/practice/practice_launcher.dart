@@ -21,6 +21,7 @@ Future<void> launchPractice(
   String? paperId,
   int? requestedCount,
   int? timeLimitSeconds,
+  int? questionLimitSeconds,
 }) async {
   if (questions.isEmpty) {
     ScaffoldMessenger.of(
@@ -91,6 +92,7 @@ Future<void> launchPractice(
       paperId: paperId,
       requestedCount: requestedCount,
       timeLimitSeconds: timeLimitSeconds,
+      questionLimitSeconds: questionLimitSeconds,
     );
   } on Object catch (error) {
     // 建会话失败（磁盘满、数据库被锁、记录损坏）时以前什么都不做：

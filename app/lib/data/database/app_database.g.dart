@@ -115,6 +115,16 @@ class $PracticeSessionsTable extends PracticeSessions
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _questionLimitSecondsMeta =
+      const VerificationMeta('questionLimitSeconds');
+  @override
+  late final GeneratedColumn<int> questionLimitSeconds = GeneratedColumn<int>(
+    'question_limit_seconds',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _durationMsMeta = const VerificationMeta(
     'durationMs',
   );
@@ -216,6 +226,7 @@ class $PracticeSessionsTable extends PracticeSessions
     requestedCount,
     actualCount,
     timeLimitSeconds,
+    questionLimitSeconds,
     durationMs,
     deadlineAt,
     revealMode,
@@ -319,6 +330,15 @@ class $PracticeSessionsTable extends PracticeSessions
         timeLimitSeconds.isAcceptableOrUnknown(
           data['time_limit_seconds']!,
           _timeLimitSecondsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('question_limit_seconds')) {
+      context.handle(
+        _questionLimitSecondsMeta,
+        questionLimitSeconds.isAcceptableOrUnknown(
+          data['question_limit_seconds']!,
+          _questionLimitSecondsMeta,
         ),
       );
     }
@@ -431,6 +451,10 @@ class $PracticeSessionsTable extends PracticeSessions
         DriftSqlType.int,
         data['${effectivePrefix}time_limit_seconds'],
       ),
+      questionLimitSeconds: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}question_limit_seconds'],
+      ),
       durationMs: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}duration_ms'],
@@ -483,6 +507,11 @@ class PracticeSession extends DataClass implements Insertable<PracticeSession> {
   final int? requestedCount;
   final int actualCount;
   final int? timeLimitSeconds;
+
+  /// 本会话的单题限时（秒）。限时训练专用；null = 跟随全局设置。
+  /// 存在会话上而不是全局设置里：杀进程后从「继续练习」回来，
+  /// 限时训练的倒计时不能丢。
+  final int? questionLimitSeconds;
   final int durationMs;
   final int? deadlineAt;
   final String revealMode;
@@ -502,6 +531,7 @@ class PracticeSession extends DataClass implements Insertable<PracticeSession> {
     this.requestedCount,
     required this.actualCount,
     this.timeLimitSeconds,
+    this.questionLimitSeconds,
     required this.durationMs,
     this.deadlineAt,
     required this.revealMode,
@@ -529,6 +559,9 @@ class PracticeSession extends DataClass implements Insertable<PracticeSession> {
     map['actual_count'] = Variable<int>(actualCount);
     if (!nullToAbsent || timeLimitSeconds != null) {
       map['time_limit_seconds'] = Variable<int>(timeLimitSeconds);
+    }
+    if (!nullToAbsent || questionLimitSeconds != null) {
+      map['question_limit_seconds'] = Variable<int>(questionLimitSeconds);
     }
     map['duration_ms'] = Variable<int>(durationMs);
     if (!nullToAbsent || deadlineAt != null) {
@@ -563,6 +596,9 @@ class PracticeSession extends DataClass implements Insertable<PracticeSession> {
       timeLimitSeconds: timeLimitSeconds == null && nullToAbsent
           ? const Value.absent()
           : Value(timeLimitSeconds),
+      questionLimitSeconds: questionLimitSeconds == null && nullToAbsent
+          ? const Value.absent()
+          : Value(questionLimitSeconds),
       durationMs: Value(durationMs),
       deadlineAt: deadlineAt == null && nullToAbsent
           ? const Value.absent()
@@ -594,6 +630,9 @@ class PracticeSession extends DataClass implements Insertable<PracticeSession> {
       requestedCount: serializer.fromJson<int?>(json['requestedCount']),
       actualCount: serializer.fromJson<int>(json['actualCount']),
       timeLimitSeconds: serializer.fromJson<int?>(json['timeLimitSeconds']),
+      questionLimitSeconds: serializer.fromJson<int?>(
+        json['questionLimitSeconds'],
+      ),
       durationMs: serializer.fromJson<int>(json['durationMs']),
       deadlineAt: serializer.fromJson<int?>(json['deadlineAt']),
       revealMode: serializer.fromJson<String>(json['revealMode']),
@@ -618,6 +657,7 @@ class PracticeSession extends DataClass implements Insertable<PracticeSession> {
       'requestedCount': serializer.toJson<int?>(requestedCount),
       'actualCount': serializer.toJson<int>(actualCount),
       'timeLimitSeconds': serializer.toJson<int?>(timeLimitSeconds),
+      'questionLimitSeconds': serializer.toJson<int?>(questionLimitSeconds),
       'durationMs': serializer.toJson<int>(durationMs),
       'deadlineAt': serializer.toJson<int?>(deadlineAt),
       'revealMode': serializer.toJson<String>(revealMode),
@@ -640,6 +680,7 @@ class PracticeSession extends DataClass implements Insertable<PracticeSession> {
     Value<int?> requestedCount = const Value.absent(),
     int? actualCount,
     Value<int?> timeLimitSeconds = const Value.absent(),
+    Value<int?> questionLimitSeconds = const Value.absent(),
     int? durationMs,
     Value<int?> deadlineAt = const Value.absent(),
     String? revealMode,
@@ -663,6 +704,9 @@ class PracticeSession extends DataClass implements Insertable<PracticeSession> {
     timeLimitSeconds: timeLimitSeconds.present
         ? timeLimitSeconds.value
         : this.timeLimitSeconds,
+    questionLimitSeconds: questionLimitSeconds.present
+        ? questionLimitSeconds.value
+        : this.questionLimitSeconds,
     durationMs: durationMs ?? this.durationMs,
     deadlineAt: deadlineAt.present ? deadlineAt.value : this.deadlineAt,
     revealMode: revealMode ?? this.revealMode,
@@ -696,6 +740,9 @@ class PracticeSession extends DataClass implements Insertable<PracticeSession> {
       timeLimitSeconds: data.timeLimitSeconds.present
           ? data.timeLimitSeconds.value
           : this.timeLimitSeconds,
+      questionLimitSeconds: data.questionLimitSeconds.present
+          ? data.questionLimitSeconds.value
+          : this.questionLimitSeconds,
       durationMs: data.durationMs.present
           ? data.durationMs.value
           : this.durationMs,
@@ -730,6 +777,7 @@ class PracticeSession extends DataClass implements Insertable<PracticeSession> {
           ..write('requestedCount: $requestedCount, ')
           ..write('actualCount: $actualCount, ')
           ..write('timeLimitSeconds: $timeLimitSeconds, ')
+          ..write('questionLimitSeconds: $questionLimitSeconds, ')
           ..write('durationMs: $durationMs, ')
           ..write('deadlineAt: $deadlineAt, ')
           ..write('revealMode: $revealMode, ')
@@ -754,6 +802,7 @@ class PracticeSession extends DataClass implements Insertable<PracticeSession> {
     requestedCount,
     actualCount,
     timeLimitSeconds,
+    questionLimitSeconds,
     durationMs,
     deadlineAt,
     revealMode,
@@ -777,6 +826,7 @@ class PracticeSession extends DataClass implements Insertable<PracticeSession> {
           other.requestedCount == this.requestedCount &&
           other.actualCount == this.actualCount &&
           other.timeLimitSeconds == this.timeLimitSeconds &&
+          other.questionLimitSeconds == this.questionLimitSeconds &&
           other.durationMs == this.durationMs &&
           other.deadlineAt == this.deadlineAt &&
           other.revealMode == this.revealMode &&
@@ -798,6 +848,7 @@ class PracticeSessionsCompanion extends UpdateCompanion<PracticeSession> {
   final Value<int?> requestedCount;
   final Value<int> actualCount;
   final Value<int?> timeLimitSeconds;
+  final Value<int?> questionLimitSeconds;
   final Value<int> durationMs;
   final Value<int?> deadlineAt;
   final Value<String> revealMode;
@@ -818,6 +869,7 @@ class PracticeSessionsCompanion extends UpdateCompanion<PracticeSession> {
     this.requestedCount = const Value.absent(),
     this.actualCount = const Value.absent(),
     this.timeLimitSeconds = const Value.absent(),
+    this.questionLimitSeconds = const Value.absent(),
     this.durationMs = const Value.absent(),
     this.deadlineAt = const Value.absent(),
     this.revealMode = const Value.absent(),
@@ -839,6 +891,7 @@ class PracticeSessionsCompanion extends UpdateCompanion<PracticeSession> {
     this.requestedCount = const Value.absent(),
     required int actualCount,
     this.timeLimitSeconds = const Value.absent(),
+    this.questionLimitSeconds = const Value.absent(),
     this.durationMs = const Value.absent(),
     this.deadlineAt = const Value.absent(),
     required String revealMode,
@@ -867,6 +920,7 @@ class PracticeSessionsCompanion extends UpdateCompanion<PracticeSession> {
     Expression<int>? requestedCount,
     Expression<int>? actualCount,
     Expression<int>? timeLimitSeconds,
+    Expression<int>? questionLimitSeconds,
     Expression<int>? durationMs,
     Expression<int>? deadlineAt,
     Expression<String>? revealMode,
@@ -888,6 +942,8 @@ class PracticeSessionsCompanion extends UpdateCompanion<PracticeSession> {
       if (requestedCount != null) 'requested_count': requestedCount,
       if (actualCount != null) 'actual_count': actualCount,
       if (timeLimitSeconds != null) 'time_limit_seconds': timeLimitSeconds,
+      if (questionLimitSeconds != null)
+        'question_limit_seconds': questionLimitSeconds,
       if (durationMs != null) 'duration_ms': durationMs,
       if (deadlineAt != null) 'deadline_at': deadlineAt,
       if (revealMode != null) 'reveal_mode': revealMode,
@@ -911,6 +967,7 @@ class PracticeSessionsCompanion extends UpdateCompanion<PracticeSession> {
     Value<int?>? requestedCount,
     Value<int>? actualCount,
     Value<int?>? timeLimitSeconds,
+    Value<int?>? questionLimitSeconds,
     Value<int>? durationMs,
     Value<int?>? deadlineAt,
     Value<String>? revealMode,
@@ -932,6 +989,7 @@ class PracticeSessionsCompanion extends UpdateCompanion<PracticeSession> {
       requestedCount: requestedCount ?? this.requestedCount,
       actualCount: actualCount ?? this.actualCount,
       timeLimitSeconds: timeLimitSeconds ?? this.timeLimitSeconds,
+      questionLimitSeconds: questionLimitSeconds ?? this.questionLimitSeconds,
       durationMs: durationMs ?? this.durationMs,
       deadlineAt: deadlineAt ?? this.deadlineAt,
       revealMode: revealMode ?? this.revealMode,
@@ -977,6 +1035,9 @@ class PracticeSessionsCompanion extends UpdateCompanion<PracticeSession> {
     if (timeLimitSeconds.present) {
       map['time_limit_seconds'] = Variable<int>(timeLimitSeconds.value);
     }
+    if (questionLimitSeconds.present) {
+      map['question_limit_seconds'] = Variable<int>(questionLimitSeconds.value);
+    }
     if (durationMs.present) {
       map['duration_ms'] = Variable<int>(durationMs.value);
     }
@@ -1020,6 +1081,7 @@ class PracticeSessionsCompanion extends UpdateCompanion<PracticeSession> {
           ..write('requestedCount: $requestedCount, ')
           ..write('actualCount: $actualCount, ')
           ..write('timeLimitSeconds: $timeLimitSeconds, ')
+          ..write('questionLimitSeconds: $questionLimitSeconds, ')
           ..write('durationMs: $durationMs, ')
           ..write('deadlineAt: $deadlineAt, ')
           ..write('revealMode: $revealMode, ')
@@ -3854,6 +3916,7 @@ typedef $$PracticeSessionsTableCreateCompanionBuilder =
       Value<int?> requestedCount,
       required int actualCount,
       Value<int?> timeLimitSeconds,
+      Value<int?> questionLimitSeconds,
       Value<int> durationMs,
       Value<int?> deadlineAt,
       required String revealMode,
@@ -3876,6 +3939,7 @@ typedef $$PracticeSessionsTableUpdateCompanionBuilder =
       Value<int?> requestedCount,
       Value<int> actualCount,
       Value<int?> timeLimitSeconds,
+      Value<int?> questionLimitSeconds,
       Value<int> durationMs,
       Value<int?> deadlineAt,
       Value<String> revealMode,
@@ -3943,6 +4007,11 @@ class $$PracticeSessionsTableFilterComposer
 
   ColumnFilters<int> get timeLimitSeconds => $composableBuilder(
     column: $table.timeLimitSeconds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get questionLimitSeconds => $composableBuilder(
+    column: $table.questionLimitSeconds,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4046,6 +4115,11 @@ class $$PracticeSessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get questionLimitSeconds => $composableBuilder(
+    column: $table.questionLimitSeconds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get durationMs => $composableBuilder(
     column: $table.durationMs,
     builder: (column) => ColumnOrderings(column),
@@ -4138,6 +4212,11 @@ class $$PracticeSessionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get questionLimitSeconds => $composableBuilder(
+    column: $table.questionLimitSeconds,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get durationMs => $composableBuilder(
     column: $table.durationMs,
     builder: (column) => column,
@@ -4220,6 +4299,7 @@ class $$PracticeSessionsTableTableManager
                 Value<int?> requestedCount = const Value.absent(),
                 Value<int> actualCount = const Value.absent(),
                 Value<int?> timeLimitSeconds = const Value.absent(),
+                Value<int?> questionLimitSeconds = const Value.absent(),
                 Value<int> durationMs = const Value.absent(),
                 Value<int?> deadlineAt = const Value.absent(),
                 Value<String> revealMode = const Value.absent(),
@@ -4240,6 +4320,7 @@ class $$PracticeSessionsTableTableManager
                 requestedCount: requestedCount,
                 actualCount: actualCount,
                 timeLimitSeconds: timeLimitSeconds,
+                questionLimitSeconds: questionLimitSeconds,
                 durationMs: durationMs,
                 deadlineAt: deadlineAt,
                 revealMode: revealMode,
@@ -4262,6 +4343,7 @@ class $$PracticeSessionsTableTableManager
                 Value<int?> requestedCount = const Value.absent(),
                 required int actualCount,
                 Value<int?> timeLimitSeconds = const Value.absent(),
+                Value<int?> questionLimitSeconds = const Value.absent(),
                 Value<int> durationMs = const Value.absent(),
                 Value<int?> deadlineAt = const Value.absent(),
                 required String revealMode,
@@ -4282,6 +4364,7 @@ class $$PracticeSessionsTableTableManager
                 requestedCount: requestedCount,
                 actualCount: actualCount,
                 timeLimitSeconds: timeLimitSeconds,
+                questionLimitSeconds: questionLimitSeconds,
                 durationMs: durationMs,
                 deadlineAt: deadlineAt,
                 revealMode: revealMode,

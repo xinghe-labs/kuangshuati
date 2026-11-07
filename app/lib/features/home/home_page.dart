@@ -8,6 +8,7 @@ import '../../data/database/app_database.dart';
 import '../../domain/models.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../practice/practice_launcher.dart';
+import '../practice/time_budget.dart';
 import '../settings/settings_platform_io.dart'
     if (dart.library.js_interop) '../settings/settings_platform_web.dart';
 
@@ -105,6 +106,13 @@ class _HomePageState extends ConsumerState<HomePage> {
               icon: Icons.timer_outlined,
               onTap: () => context.go('/bank'),
             ),
+            _ActionTile(
+              index: '05',
+              title: '限时训练',
+              detail: '单题倒计时，练出考试节奏',
+              icon: Icons.hourglass_bottom,
+              onTap: () => _startTimedTraining(context, ref),
+            ),
           ],
         ),
         const SizedBox(height: 22),
@@ -158,6 +166,33 @@ class _HomePageState extends ConsumerState<HomePage> {
       title: '顺序练习',
       questions: questions,
       requestedCount: 100,
+    );
+  }
+
+  // 限时训练：首页一级入口。选单题档位后直接开一组随机 20 题，
+  // 档位存在会话上（杀进程后继续练习也不丢），不改全局设置。
+  Future<void> _startTimedTraining(BuildContext context, WidgetRef ref) async {
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      builder: (sheetContext) => const _TimedTrainingSheet(),
+    );
+    if (picked == null || !context.mounted) return;
+    final List<QuestionContent> questions;
+    try {
+      questions = await randomQuestions(ref, 20);
+    } on Object catch (error) {
+      if (context.mounted) showContentError(context, error);
+      return;
+    }
+    if (!context.mounted) return;
+    await launchPractice(
+      context,
+      ref,
+      mode: PracticeMode.random,
+      title: '限时训练',
+      questions: questions,
+      requestedCount: 20,
+      questionLimitSeconds: picked,
     );
   }
 
@@ -581,4 +616,68 @@ String _dayKey(DateTime value) {
   final month = value.month.toString().padLeft(2, '0');
   final day = value.day.toString().padLeft(2, '0');
   return '${value.year}-$month-$day';
+}
+
+/// 限时训练的档位选择弹层。
+///
+/// 档位来自 time_budget.dart 的同一组常量（45/60/75/90/120 秒），
+/// 默认 60 秒——和真实考试里行测单题平均用时接近，也最容易感知到
+/// 倒计时的紧迫感。选择只作用于这一组练习，不改全局设置。
+class _TimedTrainingSheet extends StatefulWidget {
+  const _TimedTrainingSheet();
+
+  @override
+  State<_TimedTrainingSheet> createState() => _TimedTrainingSheetState();
+}
+
+class _TimedTrainingSheetState extends State<_TimedTrainingSheet> {
+  int _selected = 60;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '限时训练',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '随机 20 题，每题限时作答。临近变橙、超时变红提醒，不强制交卷。',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final choice in questionTimeLimitChoices)
+                  if (choice > 0)
+                    ChoiceChip(
+                      label: Text('$choice秒'),
+                      selected: _selected == choice,
+                      onSelected: (_) => setState(() => _selected = choice),
+                    ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(_selected),
+                child: Text('开始 · 每题 ${formatLimitClock(_selected)}'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

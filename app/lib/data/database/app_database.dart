@@ -19,6 +19,11 @@ class PracticeSessions extends Table {
   IntColumn get requestedCount => integer().nullable()();
   IntColumn get actualCount => integer()();
   IntColumn get timeLimitSeconds => integer().nullable()();
+
+  /// 本会话的单题限时（秒）。限时训练专用；null = 跟随全局设置。
+  /// 存在会话上而不是全局设置里：杀进程后从「继续练习」回来，
+  /// 限时训练的倒计时不能丢。
+  IntColumn get questionLimitSeconds => integer().nullable()();
   IntColumn get durationMs => integer().withDefault(const Constant(0))();
   IntColumn get deadlineAt => integer().nullable()();
   TextColumn get revealMode => text()();
@@ -164,7 +169,7 @@ class AppDatabase extends _$AppDatabase {
   DateTime _now() => (_clock ?? DateTime.now)();
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -197,6 +202,13 @@ class AppDatabase extends _$AppDatabase {
         // 避免交卷时同一题再算一遍。旧数据的当日统计本来就是交卷时
         // 统一累加的，给已有答案行置 true 会少算，所以保持默认 false。
         await migrator.addColumn(sessionAnswers, sessionAnswers.dailyCounted);
+      }
+      if (from < 7) {
+        // 限时训练：单题倒计时档位存在会话上，旧会话为 null（跟随全局）。
+        await migrator.addColumn(
+          practiceSessions,
+          practiceSessions.questionLimitSeconds,
+        );
       }
     },
     onCreate: (migrator) async {
@@ -557,6 +569,7 @@ class AppDatabase extends _$AppDatabase {
     String? paperId,
     int? requestedCount,
     int? timeLimitSeconds,
+    int? questionLimitSeconds,
     Map<String, Object?> filters = const {},
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -591,6 +604,7 @@ class AppDatabase extends _$AppDatabase {
           requestedCount: Value(requestedCount),
           actualCount: questions.length,
           timeLimitSeconds: Value(timeLimitSeconds),
+          questionLimitSeconds: Value(questionLimitSeconds),
           deadlineAt: Value(deadline),
           revealMode: revealMode.value,
           createdAt: now,
