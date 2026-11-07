@@ -176,9 +176,12 @@ class ContentImportService {
       report(0.15, '正在解析题库');
       // 解析 + 建 sqlite + 校验是纯 CPU 工作（大题库要几秒），
       // 放进独立 isolate 执行，避免导入期间整个界面卡死。
-      final summary = await Isolate.run(
-        () => _parseAndBuild(jsonString, databaseTemporary.path),
-      );
+      // 注意：必须经 _parseInIsolate 中转，不能在这里直接写 Isolate.run
+      // 闭包——Dart 的闭包捕获按作用域共享上下文，直接写会把
+      // onProgress（ContentManager 的 ChangeNotifier，含 riverpod
+      // provider 链）一起序列化，真机上报
+      // "Illegal argument in isolate message: object is unsendable"。
+      final summary = await _parseInIsolate(jsonString, databaseTemporary.path);
 
       report(0.9, '正在安装离线题库');
       final databaseStaged = File(
@@ -244,6 +247,15 @@ class ContentImportService {
 
   static Future<void> _deleteFileIfExists(File file) async {
     if (await file.exists()) await file.delete();
+  }
+
+  /// 独立函数中转：让 Isolate.run 闭包只捕获两个 String 参数，
+  /// 不与 importFromFile 的 onProgress/this 共享作用域上下文。
+  static Future<ImportedBankSummary> _parseInIsolate(
+    String jsonString,
+    String databasePath,
+  ) {
+    return Isolate.run(() => _parseAndBuild(jsonString, databasePath));
   }
 
   /// 解析 + 建库 + 校验。在后台 isolate 里执行，只把小体积摘要带回主 isolate。
