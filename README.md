@@ -61,23 +61,16 @@ flutter run --dart-define=CONTENT_MANIFEST_URL=https://your-host/content-manifes
 
 ### Web 端
 
-```bash
-python tools/build_web.py     # 构建 app/build/web，含核心题库
-python tools/serve_web.py     # 默认 http://127.0.0.1:8080，--lan 可让同 Wi-Fi 手机访问
-```
-
-浏览器端用 OPFS + SQLite WASM，**必须带 `Cross-Origin-Opener-Policy: same-origin` 和 `Cross-Origin-Embedder-Policy: require-corp` 响应头**（`serve_web.py` 已带），否则 `crossOriginIsolated` 为 false，数据库 worker 起不来。注意浏览器可能在存储压力下清理 OPFS 数据，重要进度请用备份导出。
+`app/web` 保留完整的 Flutter Web 壳（OPFS + SQLite WASM，需 `Cross-Origin-Opener-Policy: same-origin` 与 `Cross-Origin-Embedder-Policy: require-corp` 响应头才能起数据库 worker）。构建与本地预览脚本未包含在开源范围，需自行解决静态服务器的响应头。
 
 ## 架构
 
 ```text
-ui/          可直接在浏览器打开的移动优先交互原型（HTML/CSS/JS）
 app/         Flutter 客户端（Android 已验证，iOS 仅编译验证）
   lib/data/content/     内容库读取：分片安装、只读 SQLite、题图 BLOB
   lib/data/database/    用户数据（作答、错题、收藏、笔记）—— drift，与内容库物理隔离
   lib/features/         首页 / 题库 / 练习 / 错题 / 统计 / 设置
-tools/       题库导入、内容包构建、发布脚本
-docs/        需求发现、开发文档、UI 规范
+docs/        截图与内容清单示例
 ```
 
 几个刻意的取舍：
@@ -100,11 +93,9 @@ flutter test        # 126 个测试通过
 CI 配置见 `.github/workflows/ci.yml`。
 
 ## 题库来源与授权（请先读这条）
-
 - **本仓库只开源代码，不包含题库数据。** 仓库里没有任何一道真实题目的正文、解析或题图。
 - App 首次启动从作者的内容源下载题库包（约 145 MB，按 16 MiB 分片）。题目为公考真题的网友回忆整理，题目与解析的权利归原出处；**本项目未取得原出处的公开分发授权**，题库仅以个人学习用途提供给 App 下载，请勿转售或再分发。
 - 内置的 12 道演示题是自写的示例数据，仅用于跑通交互。
-- 题库基线（题量、去重后的图片数、内容库大小）写在 [docs/development-plan.md](docs/development-plan.md)，供自行构建时对照。
 
 ## 已知限制
 
@@ -115,14 +106,7 @@ CI 配置见 `.github/workflows/ci.yml`。
 - **图片类题目**：题库里 2 张源图缺失，保留缺图状态而不是静默删题。
 - 在 Windows 上跑 `flutter test` 偶发 `sqlite3.dll` 拒绝访问，是 native-assets 构建缓存被残留测试进程占用，关掉残留 `dart.exe`/`flutter_tester.exe` 重试即可。
 
-## 文档
-
-| 文件 | 内容 |
-|---|---|
-| [docs/requirements-discovery.md](docs/requirements-discovery.md) | 用户视角需求发现与发布边界 |
-| [docs/development-plan.md](docs/development-plan.md) | 技术架构、数据模型、同步与离线策略、测试 |
-| [docs/ui-spec.md](docs/ui-spec.md) | 信息架构、视觉系统、页面状态、无障碍与验收记录 |
-| [ui/index.html](ui/index.html) | 浏览器可直接打开的交互原型 |
+CI 配置见 `.github/workflows/ci.yml`。
 
 ## 许可证
 
