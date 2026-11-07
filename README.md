@@ -55,7 +55,7 @@ flutter run --dart-define=CONTENT_MANIFEST_URL=https://your-host/content-manifes
 
 首次启动会下载、校验 SHA-256 并安装题库包，之后离线使用。
 
-**B. 自己生成题库包**：`tools/import_question_bank.py` 从 JSONL 构建带图的 SQLite 内容库，`tools/build_content_package.py` 负责切片、压缩和清单生成。
+**B. 自己生成题库包**：题库导入与内容包构建工具未包含在开源范围。内容包的格式与清单结构见 [docs/content-manifest.example.json](docs/content-manifest.example.json)，可自行实现生成器后用 `--dart-define=CONTENT_MANIFEST_URL` 指向自己的清单。
 
 > 拿不到题库时（离线、或下载失败），debug 构建会回落到内置的 12 道演示题，方便先把交互跑通；`--dart-define=KUANGSHUATI_DEMO=false` 可关掉这个兜底。
 
