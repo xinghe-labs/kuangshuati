@@ -9,6 +9,8 @@ import '../content/content_import_service.dart';
 import '../content/content_manager_base.dart';
 import '../content/content_install_page.dart';
 import '../practice/time_budget.dart';
+import '../reminder/reminder_scheduler.dart'
+    if (dart.library.js_interop) '../reminder/reminder_scheduler_web.dart';
 import 'settings_platform_io.dart'
     if (dart.library.js_interop) 'settings_platform_web.dart';
 
@@ -36,12 +38,41 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     });
   }
 
+  /// 开关每日练习提醒：开 → 选时间并落库重排；关 → 落库并取消。
+  Future<void> _toggleReminder(bool on, int currentMinutes) async {
+    final db = ref.read(databaseProvider);
+    if (!on) {
+      await db.setSetting('reminderEnabled', 'false');
+      await syncReminderFromSettings(db);
+      return;
+    }
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(
+        DateTime(2026, 1, 1).add(Duration(minutes: currentMinutes)),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    await db.setSetting(
+        'reminderMinutesOfDay', (picked.hour * 60 + picked.minute).toString());
+    await db.setSetting('reminderEnabled', 'true');
+    await syncReminderFromSettings(db);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已开启每天 ${picked.format(context)} 的练习提醒')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final fontScale = ref.watch(fontScaleProvider).value ?? 1;
     final revealImmediately =
         ref.watch(revealImmediatelyProvider).value ?? true;
     final showTimer = ref.watch(showTimerProvider).value ?? true;
+    final reminderOn = ref.watch(reminderEnabledProvider).value ?? false;
+    final reminderMinutes =
+        ref.watch(reminderMinutesProvider).value ?? kDefaultReminderMinutes;
+    final reminderSupported = ref.watch(reminderSupportedProvider);
     final questionTimeLimit =
         ref.watch(questionTimeLimitProvider).value ?? 0;
     final contentStats = ref.watch(contentStatsProvider);
@@ -131,6 +162,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       ),
                   ],
                 ),
+              ),
+            ),
+            _SettingTile(
+              icon: Icons.notifications_active_outlined,
+              title: '每日练习提醒',
+              subtitle: reminderSupported
+                  ? (reminderOn
+                      ? '每天 ${formatReminderTime(reminderMinutes)} 提醒你来刷题'
+                      : '每天固定时间提醒你来刷题')
+                  : '当前环境不支持本地提醒',
+              trailing: Switch(
+                value: reminderOn,
+                onChanged: reminderSupported
+                    ? (value) => _toggleReminder(value, reminderMinutes)
+                    : null,
               ),
             ),
           ],
