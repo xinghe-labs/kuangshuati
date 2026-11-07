@@ -1,4 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../features/reminder/reminder_scheduler.dart'
+    if (dart.library.js_interop) '../features/reminder/reminder_scheduler_web.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -132,6 +135,26 @@ final questionTimeLimitProvider = StreamProvider<int>((ref) {
       .watchSetting('questionTimeLimitSec')
       .map((value) => value == null ? 0 : int.tryParse(value) ?? 0);
 });
+
+/// 每日练习提醒：开关 + 提醒时间（分钟数）。
+final reminderEnabledProvider = StreamProvider<bool>((ref) {
+  return ref
+      .watch(databaseProvider)
+      .watchSetting('reminderEnabled')
+      .map((value) => value == 'true');
+});
+
+final reminderMinutesProvider = StreamProvider<int>((ref) {
+  return ref
+      .watch(databaseProvider)
+      .watchSetting('reminderMinutesOfDay')
+      .map(parseReminderMinutes);
+});
+
+/// 当前环境是否支持本地提醒（Web 端为 false，设置页据此隐藏入口）。
+final reminderSupportedProvider = Provider<bool>(
+  (ref) => reminderScheduler.supported,
+);
 
 /// 一条「最近练习」记录：会话本身 + 作答概况。
 class RecentSessionEntry {
