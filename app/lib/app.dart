@@ -24,6 +24,20 @@ class KuangshuatiApp extends ConsumerStatefulWidget {
 
 class _KuangshuatiAppState extends ConsumerState<KuangshuatiApp> {
   @override
+  void initState() {
+    super.initState();
+    // 冷启动兜底：demo 内容是同步 ready 的，下面的 ref.listen 注册时
+    // 转变已经发生过、永远不会回调，所以首帧后如果题库已就绪就直掃
+    // 补排一次提醒（幂等）。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final manager = ref.read(contentManagerProvider);
+      if (manager.phase == ContentManagerPhase.ready) {
+        unawaited(syncReminderFromSettings(ref.read(databaseProvider)));
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final manager = ref.watch(contentManagerProvider);
     // 题库就绪 = 数据库可用：补排一次每日提醒（幂等，覆盖上次未排上/
