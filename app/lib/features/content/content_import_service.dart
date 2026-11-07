@@ -8,121 +8,22 @@ import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+import 'content_import_models.dart';
 import 'content_package_service.dart';
+
+// 题库导入的纯数据类型在 content_import_models.dart（web 图不触 sqlite3），
+// 这里 re-export 保证既有 import 方（content_manager.dart、测试）不用改。
+export 'content_import_models.dart';
 
 /// 本地导入题库的 JSON 格式约定（见 docs/question-bank-format.md）。
 const _bankFormat = 'kuangshuati-bank';
-const _bankFormatVersion = 1;
+const _bankFormatVersion = 2;
+/// 历史兼容：v1 与 v2 的唯一差异是 v2 允许自评题（options/answer 同时省略）。
+const _acceptedFormatVersions = {1, _bankFormatVersion};
 
 /// 单个题库 JSON 文件的大小上限：解析期字符串 + 解码结构 + 解码后图片
 /// 大约是文件体积的 3 倍内存，64MB 文件在低端机上也够安全。
 const _maxImportFileBytes = 64 * 1024 * 1024;
-
-/// 题干/选项/材料/解析里内嵌图片的标记，与官方建库管线
-/// （tools/import_question_bank.py 的 IMAGE_OPEN/CLOSE）保持一致。
-const imageMarkerOpen = '\ue000';
-const imageMarkerClose = '\ue001';
-
-class ContentImportException implements Exception {
-  const ContentImportException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
-}
-
-/// 一道已通过校验、可直接入库的题目。
-class ImportedBankQuestion {
-  ImportedBankQuestion({
-    required this.id,
-    required this.module,
-    required this.type,
-    required this.questionNo,
-    required this.groupId,
-    required this.material,
-    required this.stem,
-    required this.stemText,
-    required this.options,
-    required this.answers,
-    required this.solution,
-  });
-
-  final String id;
-  final String module;
-  final String type;
-  final int questionNo;
-  final String groupId;
-  final String material;
-  final String stem;
-  final String stemText;
-  final Map<String, String> options;
-  final List<String> answers;
-  final String solution;
-}
-
-class ImportedBankPaper {
-  ImportedBankPaper({
-    required this.id,
-    required this.title,
-    required this.year,
-    required this.region,
-    required this.paperType,
-    required this.durationSeconds,
-    required this.questions,
-  });
-
-  final String id;
-  final String title;
-  final int year;
-  final String region;
-  final String paperType;
-  final int durationSeconds;
-  final List<ImportedBankQuestion> questions;
-}
-
-class ImportedBankImage {
-  ImportedBankImage({
-    required this.assetId,
-    required this.mime,
-    required this.bytes,
-  });
-
-  final String assetId;
-  final String mime;
-  final Uint8List bytes;
-}
-
-class ImportedBank {
-  ImportedBank({
-    required this.name,
-    required this.contentVersion,
-    required this.papers,
-    required this.images,
-  });
-
-  final String name;
-  final String contentVersion;
-  final List<ImportedBankPaper> papers;
-  final Map<String, ImportedBankImage> images;
-}
-
-/// 导入完成后的结果摘要。
-class ImportedBankSummary {
-  const ImportedBankSummary({
-    required this.name,
-    required this.contentVersion,
-    required this.questionCount,
-    required this.paperCount,
-    required this.imageCount,
-  });
-
-  final String name;
-  final String contentVersion;
-  final int questionCount;
-  final int paperCount;
-  final int imageCount;
-}
 
 /// 把官方下载管线之外的自制题库 JSON 装进应用：
 /// 解析校验 → 建 content.sqlite → 完整性检查 → 与下载安装同一套原子落盘。
@@ -302,9 +203,9 @@ ImportedBank parseBankJson(String source) {
     throw const ContentImportException('题库 format 必须是 "kuangshuati-bank"');
   }
   final formatVersion = decoded['formatVersion'] ?? _bankFormatVersion;
-  if (formatVersion != _bankFormatVersion) {
+  if (!_acceptedFormatVersions.contains(formatVersion)) {
     throw ContentImportException(
-      '不支持的题库格式版本：$formatVersion（当前支持 $_bankFormatVersion）',
+      '不支持的题库格式版本：$formatVersion（当前支持 $_acceptedFormatVersions）',
     );
   }
   final name = _optionalText(decoded['name'], 'name') ?? '自定义题库';
@@ -427,35 +328,50 @@ ImportedBank parseBankJson(String source) {
       final rawSolution =
           _optionalText(rawQuestion['solution'], '$at.solution') ?? '';
       final rawOptions = rawQuestion['options'];
-      if (rawOptions is! Map<String, dynamic> || rawOptions.isEmpty) {
-        throw ContentImportException('$at.options 必须是非空对象（如 {"A": "…"}）');
-      }
-      final options = <String, String>{};
-      rawOptions.forEach((key, value) {
-        if (key.trim().isEmpty) {
-          throw ContentImportException('$at.options 的选项键不能为空');
-        }
-        if (value is! String) {
-          throw ContentImportException('$at.options["$key"] 必须是字符串');
-        }
-        options[key] = _convertImageMarkers(
-          value,
-          '$at.options["$key"]',
-          images,
-        );
-      });
       final rawAnswers = rawQuestion['answer'] ?? rawQuestion['answers'];
-      if (rawAnswers is! List || rawAnswers.isEmpty) {
-        throw ContentImportException('$at.answer 必须是非空数组（如 ["A"]）');
-      }
+      final optionsEmpty = rawOptions == null ||
+          (rawOptions is Map<String, dynamic> && rawOptions.isEmpty);
+      final answersEmpty = rawAnswers == null ||
+          (rawAnswers is List && rawAnswers.isEmpty);
+      // v2 自评题：options 与 answer 同时省略/为空，答题时由用户自评对错。
+      // 只允许双空：一空一非空是数据错误。
+      final isSelfAssessed = optionsEmpty && answersEmpty;
+      final options = <String, String>{};
       final answers = <String>[];
-      for (final key in rawAnswers) {
-        if (key is! String || !options.containsKey(key)) {
+      if (!isSelfAssessed) {
+        if (optionsEmpty) {
           throw ContentImportException(
-            '$at.answer 里的 "$key" 不在 options 的选项键 ${options.keys.toList()} 中',
+            '$at.options 必须是非空对象（如 {"A": "…"}）；'
+            '如为无选项自评题，options 与 answer 需同时省略',
           );
         }
-        if (!answers.contains(key)) answers.add(key);
+        rawOptions.forEach((key, value) {
+          if (key.trim().isEmpty) {
+            throw ContentImportException('$at.options 的选项键不能为空');
+          }
+          if (value is! String) {
+            throw ContentImportException('$at.options["$key"] 必须是字符串');
+          }
+          options[key] = _convertImageMarkers(
+            value,
+            '$at.options["$key"]',
+            images,
+          );
+        });
+        if (answersEmpty) {
+          throw ContentImportException(
+            '$at.answer 必须是非空数组（如 ["A"]）；'
+            '如为无选项自评题，options 与 answer 需同时省略',
+          );
+        }
+        for (final key in rawAnswers) {
+          if (key is! String || !options.containsKey(key)) {
+            throw ContentImportException(
+              '$at.answer 里的 "$key" 不在 options 的选项键 ${options.keys.toList()} 中',
+            );
+          }
+          if (!answers.contains(key)) answers.add(key);
+        }
       }
       final convertedStem = _convertImageMarkers(rawStem, '$at.stem', images);
       questions.add(
