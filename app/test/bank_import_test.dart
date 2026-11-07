@@ -22,8 +22,12 @@ void main() {
       .toList()
     ..sort((a, b) => a.path.compareTo(b.path));
 
-  test('bank 文件数量 = 8', () {
-    expect(bankFiles.length, 8, reason: bankFiles.map((f) => f.path).join('\n'));
+  test('bank 文件数量 ≥ 8（存量题库不缩水）', () {
+    expect(
+      bankFiles.length,
+      greaterThanOrEqualTo(8),
+      reason: bankFiles.map((f) => f.path).join('\n'),
+    );
   });
 
   for (final file in bankFiles) {
