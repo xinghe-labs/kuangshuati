@@ -254,6 +254,51 @@ void main() {
       );
     });
 
+    test('端到端：顶层散题（未被卷引用）自动入「未组卷题目」卷', () async {
+      final bank = _validBank();
+      bank['questions'] = [
+        {
+          // 与卷内 Q1 同 id：应去重，不重复入库
+          'id': 'Q1',
+          'module': '言语理解与表达',
+          'type': '单选',
+          'stem': '顶层重复题，不应重复入库',
+          'options': {'A': '甲', 'B': '乙'},
+          'answer': ['A'],
+        },
+        {
+          'id': 'Q3',
+          'module': '常识判断',
+          'type': '单选',
+          'stem': '散题三（不在任何卷里）',
+          'options': {'A': '甲', 'B': '乙', 'C': '丙', 'D': '丁'},
+          'answer': ['C'],
+        },
+      ];
+      final file = await writeBank(bank, 'bank-loose.json');
+      final service = ContentImportService(
+        supportDirectory: support,
+        temporaryDirectory: temporary,
+      );
+
+      final summary = await service.importFromFile(file.path);
+      // Q1/Q2（卷内）+ Q3（散题）= 3 题；P1 + 未组卷题目 = 2 卷
+      expect(summary.questionCount, 3);
+      expect(summary.paperCount, 2);
+
+      final repository = await FullContentRepository.openInstalled(
+        supportDirectory: support,
+      );
+      final stats = await repository.stats();
+      expect(stats.questionCount, 3);
+      expect(stats.paperCount, 2);
+      // 散题已入库且归入「未组卷题目」虚拟卷
+      final loose = await repository.findQuestion('${summary.bankId}:Q3');
+      expect(loose, isNotNull);
+      expect(loose!.paperId, '_loose');
+      await repository.close();
+    });
+
     test('导入失败时旧题库完好（原子性）', () async {
       final goodFile = await writeBank(_validBank(), 'good.json');
       final service = ContentImportService(

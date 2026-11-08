@@ -87,12 +87,16 @@ class ImportedBank {
     required this.contentVersion,
     required this.papers,
     required this.images,
+    this.questions = const [],
   });
 
   final String name;
   final String contentVersion;
   final List<ImportedBankPaper> papers;
   final Map<String, ImportedBankImage> images;
+
+  /// 顶层散题（未被任何试卷引用）。与卷内题同 id 的在解析层就已去重。
+  final List<ImportedBankQuestion> questions;
 }
 
 /// 导入完成后的结果摘要。
