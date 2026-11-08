@@ -291,7 +291,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       builder: (context) => AlertDialog(
         title: const Text('导入题库'),
         content: Text(
-          '将从「${platformFile.name}」（$sizeLabel）导入并替换当前题库。'
+          '将从「${platformFile.name}」（$sizeLabel）导入为新题库，与现有题库并存。'
           '练习记录、错题本和统计不受影响。',
         ),
         actions: [

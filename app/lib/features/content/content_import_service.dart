@@ -436,11 +436,105 @@ ImportedBank parseBankJson(String source, {String? idPrefix}) {
       ),
     );
   }
+  // 顶层 questions：未被试卷引用的散题（可选）。与卷内题同 id 的直接
+  // 忽略（以卷内为准），避免重复入库。
+  final looseQuestions = <ImportedBankQuestion>[];
+  final rawLoose = decoded['questions'];
+  if (rawLoose is List) {
+    for (var index = 0; index < rawLoose.length; index++) {
+      final rawQuestion = rawLoose[index];
+      final at = 'questions[$index]';
+      if (rawQuestion is! Map<String, dynamic>) {
+        throw ContentImportException('$at 必须是对象');
+      }
+      final id = _requiredText(rawQuestion['id'], '$at.id');
+      if (questionIds.contains(id)) continue;
+      questionIds.add(id);
+      final module =
+          _optionalText(rawQuestion['module'], '$at.module') ?? '综合';
+      final type = _optionalText(rawQuestion['type'], '$at.type') ?? '';
+      final rawStem = _requiredText(rawQuestion['stem'], '$at.stem');
+      final rawSolution =
+          _optionalText(rawQuestion['solution'], '$at.solution') ?? '';
+      final rawOptions = rawQuestion['options'];
+      final rawAnswers = rawQuestion['answer'] ?? rawQuestion['answers'];
+      final optionsEmpty = rawOptions == null ||
+          (rawOptions is Map<String, dynamic> && rawOptions.isEmpty);
+      final answersEmpty = rawAnswers == null ||
+          (rawAnswers is List && rawAnswers.isEmpty);
+      final isSelfAssessed = optionsEmpty && answersEmpty;
+      final options = <String, String>{};
+      final answers = <String>[];
+      if (!isSelfAssessed) {
+        if (rawOptions is! Map<String, dynamic> || rawOptions.isEmpty) {
+          throw ContentImportException(
+            '$at.options 必须是非空对象（如 {"A": "…"}）；'
+            '如为无选项自评题，options 与 answer 需同时省略',
+          );
+        }
+        if (rawAnswers is! List || rawAnswers.isEmpty) {
+          throw ContentImportException(
+            '$at.answer 必须是非空数组（如 ["A"]）；'
+            '如为无选项自评题，options 与 answer 需同时省略',
+          );
+        }
+        rawOptions.forEach((key, value) {
+          if (key.trim().isEmpty) {
+            throw ContentImportException('$at.options 的选项键不能为空');
+          }
+          if (value is! String) {
+            throw ContentImportException('$at.options["$key"] 必须是字符串');
+          }
+          options[key] = _convertImageMarkers(
+            value,
+            '$at.options["$key"]',
+            images,
+            idPrefix,
+          );
+        });
+        for (final key in rawAnswers) {
+          if (key is! String || !options.containsKey(key)) {
+            throw ContentImportException(
+              '$at.answer 里的 "$key" 不在 options 的选项键 ${options.keys.toList()} 中',
+            );
+          }
+          if (!answers.contains(key)) answers.add(key);
+        }
+      }
+      final convertedStem = _convertImageMarkers(
+        rawStem,
+        '$at.stem',
+        images,
+        idPrefix,
+      );
+      looseQuestions.add(
+        ImportedBankQuestion(
+          id: prefixedId(id, idPrefix),
+          module: module,
+          type: type,
+          questionNo: 0,
+          groupId: '',
+          material: '',
+          stem: convertedStem,
+          stemText: _deriveStemText(rawQuestion['stemText'], convertedStem),
+          options: options,
+          answers: answers,
+          solution: _convertImageMarkers(
+            rawSolution,
+            '$at.solution',
+            images,
+            idPrefix,
+          ),
+        ),
+      );
+    }
+  }
   return ImportedBank(
     name: name,
     contentVersion: contentVersion,
     papers: papers,
     images: images,
+    questions: looseQuestions,
   );
 }
 
@@ -650,40 +744,62 @@ Future<Map<String, int>> _buildDatabase(
         duration_seconds
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ''');
+    // 顶层散题集合在 try 后的 metadata / 返回值里也要用，提前到 try 外声明。
+    List<ImportedBankQuestion> looseQuestions = const [];
     try {
+      // 抽出写题逻辑：卷内题和顶层散题共用同一套 INSERT / hash 逻辑。
+      // （顶层散题在解析层已与卷内题按 id 去重。）
+      void writeQuestionRow(
+        ImportedBankQuestion question, {
+        required String paperId,
+        required String paperTitle,
+        required int? year,
+        required String region,
+        required int sequence,
+      }) {
+        final optionsJson = jsonEncode(question.options);
+        final correctJson = jsonEncode(question.answers);
+        final contentHash = sha256
+            .convert(
+              utf8.encode(
+                '${question.id}|${question.stem}|$optionsJson|$correctJson',
+              ),
+            )
+            .toString();
+        questionStatement.execute([
+          question.id,
+          paperId,
+          paperTitle,
+          // papers.year / questions.year 都是 NOT NULL，散题没有年份用 0 占位。
+          year ?? 0,
+          region,
+          question.module,
+          question.questionNo,
+          sequence,
+          question.type,
+          question.groupId,
+          null,
+          question.stem,
+          question.stemText,
+          optionsJson,
+          correctJson,
+          question.solution,
+          question.material,
+          contentHash,
+        ]);
+        questionCount++;
+      }
+
       for (final paper in bank.papers) {
         for (var index = 0; index < paper.questions.length; index++) {
-          final question = paper.questions[index];
-          final optionsJson = jsonEncode(question.options);
-          final correctJson = jsonEncode(question.answers);
-          final contentHash = sha256
-              .convert(
-                utf8.encode(
-                  '${question.id}|${question.stem}|$optionsJson|$correctJson',
-                ),
-              )
-              .toString();
-          questionStatement.execute([
-            question.id,
-            paper.id,
-            paper.title,
-            paper.year,
-            paper.region,
-            question.module,
-            question.questionNo,
-            index + 1,
-            question.type,
-            question.groupId,
-            null,
-            question.stem,
-            question.stemText,
-            optionsJson,
-            correctJson,
-            question.solution,
-            question.material,
-            contentHash,
-          ]);
-          questionCount++;
+          writeQuestionRow(
+            paper.questions[index],
+            paperId: paper.id,
+            paperTitle: paper.title,
+            year: paper.year,
+            region: paper.region,
+            sequence: index + 1,
+          );
         }
         paperStatement.execute([
           paper.id,
@@ -696,6 +812,36 @@ Future<Map<String, int>> _buildDatabase(
           paper.durationSeconds,
         ]);
       }
+
+      // 顶层 questions（解析层已与卷内题去重）：自动并入一个「未组卷题目」
+      // 虚拟卷，保证导入的每一道题都可练、可被随机抽到。库内 id 空间独立，
+      // 固定 id '_loose' 不会与用户卷冲突（导入时用户 id 不做约束，但
+      // '_loose' 前缀约定保留）。
+      looseQuestions = bank.questions;
+      if (looseQuestions.isNotEmpty) {
+        const loosePaperId = '_loose';
+        const loosePaperTitle = '未组卷题目';
+        for (var index = 0; index < looseQuestions.length; index++) {
+          writeQuestionRow(
+            looseQuestions[index],
+            paperId: loosePaperId,
+            paperTitle: loosePaperTitle,
+            year: null,
+            region: '自制',
+            sequence: index + 1,
+          );
+        }
+        paperStatement.execute([
+          loosePaperId,
+          loosePaperTitle,
+          0,
+          '自制',
+          '行测',
+          '综合',
+          looseQuestions.length,
+          looseQuestions.length * 60,
+        ]);
+      }
     } finally {
       questionStatement.close();
       paperStatement.close();
@@ -705,7 +851,10 @@ Future<Map<String, int>> _buildDatabase(
       ('schema_version', '1'),
       ('content_version', bank.contentVersion),
       ('question_count', '$questionCount'),
-      ('paper_count', '${bank.papers.length}'),
+      (
+        'paper_count',
+        '${bank.papers.length + (looseQuestions.isEmpty ? 0 : 1)}',
+      ),
       ('image_count', '${imageHashes.length}'),
       ('bank_name', bank.name),
     ];
@@ -731,7 +880,7 @@ Future<Map<String, int>> _buildDatabase(
     }
     return {
       'questionCount': questionCount,
-      'paperCount': bank.papers.length,
+      'paperCount': bank.papers.length + (looseQuestions.isEmpty ? 0 : 1),
       'imageCount': imageHashes.length,
     };
   } on SqliteException catch (error) {

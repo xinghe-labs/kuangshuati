@@ -21,7 +21,7 @@ void main() {
                 children: const [
                   Text('导入题库'),
                   SizedBox(height: 2),
-                  Text('从本地 JSON 文件导入自制题库，替换当前题库'),
+                  Text('从本地 JSON 文件导入自制题库，与现有题库并存'),
                 ],
               ),
             ),
