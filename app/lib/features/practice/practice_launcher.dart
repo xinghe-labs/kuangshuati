@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
 import '../../domain/models.dart';
+import 'mock_paper.dart';
 
 /// 开始一组新练习。
 ///
@@ -147,4 +148,91 @@ Future<List<QuestionContent>> randomQuestions(
   return Future.value(
     ref.read(contentRepositoryProvider).randomQuestions(count, module: module),
   );
+}
+
+/// 随机模考：按题库各模块题量占比（或均匀）分层随机组一套整卷，
+/// 限时模考，交卷后统一判分。练完即散，不保存卷子
+/// （docs/random-mock-paper.md）。
+///
+/// 缺口处理：某模块抽不够配额时按其余模块剩余可用量再分配重抽，
+/// 最多 [randomMockMaxRounds] 轮；整体凑不齐目标题量时提示真实题量
+/// 照常开考。模块分布拿不到时退化为纯随机整卷抽题。
+Future<void> launchRandomMock(
+  BuildContext context,
+  WidgetRef ref, {
+  required int targetCount,
+  required RandomMockMix mix,
+}) async {
+  final repository = ref.read(contentRepositoryProvider);
+  try {
+    final available = Map<String, int>.from(await repository.moduleCounts());
+    List<QuestionContent> questions;
+    if (available.isEmpty) {
+      // 分布拿不到（旧题库实现/异常数据）：纯随机抽一套，功能仍可用。
+      questions = await randomQuestions(ref, targetCount);
+    } else {
+      var quotas = moduleQuotas(
+        availableByModule: available,
+        total: targetCount,
+        mix: mix,
+      );
+      final moduleOrder = quotas.keys.toList();
+      final received = <String, List<QuestionContent>>{};
+      final seenIds = <String>{};
+      for (var round = 0; round < randomMockMaxRounds; round++) {
+        var progress = false;
+        for (final entry in quotas.entries) {
+          final module = entry.key;
+          final need = entry.value - (received[module]?.length ?? 0);
+          if (need <= 0) continue;
+          final drawn = await randomQuestions(ref, need, module: module);
+          // 随机抽题可能重复返回上一轮抽过的题（演示题库还是固定种子），
+          // 去重后才有真实进展。
+          final fresh = drawn.where((item) => seenIds.add(item.id)).toList();
+          if (fresh.isEmpty) continue;
+          progress = true;
+          (received[module] ??= []).addAll(fresh);
+        }
+        final receivedByCount = {
+          for (final entry in received.entries) entry.key: entry.value.length,
+        };
+        final receivedTotal = receivedByCount.values.fold(0, (a, b) => a + b);
+        if (receivedTotal >= targetCount || !progress) break;
+        final next = nextQuotas(
+          quotas: quotas,
+          receivedByModule: receivedByCount,
+          availableByModule: available,
+          target: targetCount,
+        );
+        if (next == null) break;
+        quotas = next;
+      }
+      questions = assembleRandomMockPaper(
+        moduleOrder: moduleOrder,
+        receivedByModule: received,
+      );
+    }
+    if (!context.mounted) return;
+    if (questions.length < targetCount) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '题库题量不足，本次共组成 ${questions.length} 题（目标 $targetCount 题）',
+          ),
+        ),
+      );
+    }
+    await launchPractice(
+      context,
+      ref,
+      mode: PracticeMode.mock,
+      title: '随机模考 · ${questions.length} 题',
+      questions: questions,
+      revealMode: RevealMode.afterSubmit,
+      timeLimitSeconds: randomMockDurationSeconds(questions.length),
+      requestedCount: targetCount,
+    );
+  } on Object catch (error) {
+    if (context.mounted) showContentError(context, error);
+  }
 }

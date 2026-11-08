@@ -236,6 +236,17 @@ class SqlContentRepository implements ContentRepository {
   }
 
   @override
+  Future<Map<String, int>> moduleCounts() async {
+    final rows = await _executor.select(
+      'SELECT module, COUNT(*) AS n FROM questions GROUP BY module',
+    );
+    return {
+      for (final row in rows)
+        (row['module'] as String?) ?? '': row['n'] as int,
+    };
+  }
+
+  @override
   Future<List<QuestionContent>> sequenceQuestions({
     int limit = 100,
     Iterable<String> excludeIds = const [],

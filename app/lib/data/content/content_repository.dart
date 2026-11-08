@@ -47,6 +47,13 @@ abstract class ContentRepository {
 
   FutureOr<List<QuestionContent>> randomQuestions(int count, {String? module});
 
+  /// 各模块题量分布（随机模考配比用），题量降序不做要求，
+  /// 由调用方自行排序。
+  ///
+  /// 默认空表：实现方未支持时，随机模考退化为纯随机整卷抽题，
+  /// 功能仍可用（docs/random-mock-paper.md「缺口处理」）。
+  FutureOr<Map<String, int>> moduleCounts() => const <String, int>{};
+
   /// 顺序练习：按年份/试卷/题号返回题目。
   ///
   /// [excludeIds] 用于跳过用户已经做过的题。
