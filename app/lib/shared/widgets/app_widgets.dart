@@ -6,7 +6,7 @@ class AppPage extends StatelessWidget {
   const AppPage({
     required this.children,
     super.key,
-    this.padding = const EdgeInsets.fromLTRB(18, 18, 18, 28),
+    this.padding = const EdgeInsets.fromLTRB(12, 18, 12, 28),
   });
 
   final List<Widget> children;
