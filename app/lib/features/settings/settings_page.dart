@@ -433,28 +433,32 @@ class _SettingTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final body = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(
-        children: [
-          Icon(icon, size: 21, color: AppColors.muted),
-          const SizedBox(width: 15),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.titleSmall),
-                const SizedBox(height: 2),
-                Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-              ],
+      child: SizedBox(
+        width: double.infinity,
+        child: Row(
+          children: [
+            Icon(icon, size: 21, color: AppColors.muted),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
             ),
-          ),
-          if (trailing != null) ...[
-            const SizedBox(width: 10),
-            // 右侧控件可能比剩下的宽度还宽（例如三档字号按钮、
-            // 「版本 x.y.z」长文本）：包成 Flexible 让它参与收缩，
-            // 否则整行会向右溢出。
-            Flexible(child: trailing!),
+            if (trailing != null) ...[
+              const SizedBox(width: 10),
+              // trailing 不进 flex：Expanded 和 Flexible 都是 flex:1 会
+              // 平分剩余空间，右侧控件只能拿到一半位置，右边留一大段
+              // 空白。直接作为非 flex 子项则必然贴右；文字列可折行，
+              // 不会因 trailing 固有宽而横向溢出。
+              trailing!,
+            ],
           ],
-        ],
+        ),
       ),
     );
     if (onTap == null) return body;
