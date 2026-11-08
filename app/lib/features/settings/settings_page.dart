@@ -5,9 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../content/bank_manager_page.dart';
 import '../content/content_import_models.dart';
 import '../content/content_manager_base.dart';
-import '../content/content_install_page.dart';
 import '../reminder/reminder_scheduler.dart'
     if (dart.library.js_interop) '../reminder/reminder_scheduler_web.dart';
 import 'settings_platform_io.dart'
@@ -159,7 +159,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               icon: Icons.library_books_outlined,
               title: '离线题库',
               subtitle: contentStats.when(
-                data: (stats) => '版本 ${stats.contentVersion}',
+                data: (stats) {
+                  final banks = contentManager.installedBanks;
+                  if (banks.length <= 1) {
+                    return '版本 ${stats.contentVersion}';
+                  }
+                  return '${banks.length} 套题库 · 共 ${stats.questionCount} 题';
+                },
                 loading: () => '正在读取题库',
                 error: (error, stackTrace) => '题库读取失败',
               ),
@@ -170,17 +176,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   const Icon(Icons.chevron_right, size: 20),
                 ],
               ),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (context) => const ContentInstallPage(),
-                ),
-              ),
+              onTap: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (context) => const BankManagerPage(),
+                  ),
+                );
+                if (context.mounted) {
+                  // 从管理页回来后刷新「N 套题库」副标题。
+                  // contentStatsProvider 由题库 phase 驱动，删除/下载后
+                  // 会自动失效，这里只需让 build 重新取一次。
+                  // ignore: unused_result
+                  ref.invalidate(contentStatsProvider);
+                }
+              },
             ),
             _divider,
             _SettingTile(
               icon: Icons.upload_file_outlined,
               title: '导入题库',
-              subtitle: '从本地 JSON 文件导入自制题库，替换当前题库',
+              subtitle: '从本地 JSON 文件导入自制题库，与现有题库并存',
               trailing: const Icon(Icons.chevron_right, size: 20),
               onTap: () => _importQuestionBank(),
             ),

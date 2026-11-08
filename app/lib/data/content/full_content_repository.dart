@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -6,48 +5,75 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import '../../domain/models.dart';
+import 'bank_registry.dart';
 import 'content_repository.dart';
+import 'multi_bank_executor.dart';
 import 'sql_content_repository.dart';
 import 'sql_executor.dart';
 
-/// 原生端（Android / iOS / 桌面）的题库实现：直接用 `package:sqlite3` 读本地
-/// content.sqlite。查询逻辑在 [SqlContentRepository] 里，与 Web 端共用。
+/// 原生端（Android / iOS / 桌面）的题库实现。
+///
+/// 多题库共存：读 banks.json 登记表，把每套题库的 content.sqlite
+/// ATTACH 合并后交给 [SqlContentRepository]。旧版单文件安装由
+/// [BankRegistry.load] 自动迁移登记，不需要用户重新下载。
 class FullContentRepository implements ContentRepository {
-  FullContentRepository._(this._inner);
+  FullContentRepository._(this._inner, this._registry);
 
   final SqlContentRepository _inner;
+  final BankRegistry _registry;
+
+  /// 当前登记的题库列表（题库管理页展示用）。
+  List<BankInfo> get banks => _registry.banks;
 
   static Future<FullContentRepository> openInstalled({
     Directory? supportDirectory,
   }) async {
     final support = supportDirectory ?? await getApplicationSupportDirectory();
-    final manifestFile = File(
-      '${support.path}${Platform.pathSeparator}content-installed.json',
-    );
-    final databaseFile = File(
-      '${support.path}${Platform.pathSeparator}content.sqlite',
-    );
-    if (!await manifestFile.exists() || !await databaseFile.exists()) {
+    final registry = BankRegistry(support.path);
+    await registry.load();
+    if (registry.banks.isEmpty) {
       throw StateError('Full content package is not installed');
     }
-    final manifest =
-        jsonDecode(await manifestFile.readAsString()) as Map<String, dynamic>;
-    final expectedBytes = (manifest['databaseBytes'] as num?)?.toInt() ?? 0;
-    if (expectedBytes > 0 && await databaseFile.length() != expectedBytes) {
-      throw StateError(
-        'Installed content database size does not match manifest',
-      );
+    final entries = <({String bankId, String path})>[
+      for (final bank in registry.banks)
+        (
+          bankId: bank.id,
+          path: registry.absoluteDatabasePath(bank),
+        ),
+    ];
+    for (final entry in entries) {
+      if (!File(entry.path).existsSync()) {
+        throw StateError(
+          'Bank database missing: ${entry.bankId} (${entry.path})',
+        );
+      }
     }
-    final database = sqlite3.open(databaseFile.path, mode: OpenMode.readOnly);
-    database.execute('PRAGMA query_only = ON');
-    final integrity = database.select('PRAGMA quick_check').first.columnAt(0);
-    if (integrity != 'ok') {
-      database.close();
-      throw StateError('Content database integrity check failed: $integrity');
-    }
+    final executor = await MultiBankSqlExecutor.open(entries);
     return FullContentRepository._(
-      SqlContentRepository(_NativeSqlExecutor(database), manifest),
+      SqlContentRepository(executor, _summaryManifest(registry)),
+      registry,
     );
+  }
+
+  /// 多库汇总的统计清单：stats() 的 contentVersion 兜底、Web 图片张数
+  /// fallback 都从这里来。单库直接透传，多库拼接题数与套数。
+  static Map<String, dynamic> _summaryManifest(BankRegistry registry) {
+    if (registry.banks.length == 1) {
+      final bank = registry.banks.first;
+      return {
+        'contentVersion': bank.contentVersion,
+        'questionCount': bank.questionCount,
+        'paperCount': bank.paperCount,
+        'imageCount': bank.imageCount,
+      };
+    }
+    return {
+      'contentVersion':
+          '${registry.banks.first.contentVersion} 等 ${registry.banks.length} 套题库',
+      'questionCount': registry.totalQuestionCount,
+      'paperCount': registry.totalPaperCount,
+      'imageCount': null,
+    };
   }
 
   static FullContentRepository forTesting(
@@ -61,6 +87,7 @@ class FullContentRepository implements ContentRepository {
   }) {
     return FullContentRepository._(
       SqlContentRepository(_NativeSqlExecutor(database), manifest),
+      BankRegistry(''),
     );
   }
 

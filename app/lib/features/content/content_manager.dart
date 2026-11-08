@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../data/content/bank_registry.dart';
 import '../../data/content/content_repository.dart';
 import '../../data/content/full_content_repository.dart';
 import '../../data/content/seed_content_repository.dart';
@@ -115,6 +116,130 @@ class ContentManager extends ContentManagerBase {
       _availableManifest != null &&
       _installedManifest != null &&
       _availableManifest!.contentVersion != _installedManifest!.contentVersion;
+
+  @override
+  List<InstalledBankView> get installedBanks {
+    final full = _fullRepository;
+    if (full == null) return const [];
+    return [
+      for (final bank in full.banks)
+        InstalledBankView(
+          id: bank.id,
+          name: bank.name,
+          source: bank.source,
+          contentVersion: bank.contentVersion,
+          questionCount: bank.questionCount,
+          paperCount: bank.paperCount,
+          imageCount: bank.imageCount,
+          databaseBytes: bank.databaseBytes,
+        ),
+    ];
+  }
+
+  /// 官方题库安装/更新成功后同步登记表：count 与 sha256 变了，
+  /// 题库管理页和导入判重都要用新值。
+  Future<void> _syncOfficialRegistry(ContentPackageManifest manifest) async {
+    final support = _supportDirectory;
+    if (support == null) return;
+    final registry = BankRegistry(support.path);
+    await registry.load();
+    final existing = registry.byId(BankInfo.officialId);
+    await registry.add(
+      (existing ??
+              BankInfo(
+                id: BankInfo.officialId,
+                name: '行测真题',
+                source: 'official',
+                contentVersion: manifest.contentVersion,
+                questionCount: manifest.questionCount,
+                paperCount: manifest.paperCount,
+                imageCount: manifest.imageCount,
+                databasePath: 'content.sqlite',
+              ))
+          .copyWith(
+            contentVersion: manifest.contentVersion,
+            questionCount: manifest.questionCount,
+            paperCount: manifest.paperCount,
+            imageCount: manifest.imageCount,
+            sha256: manifest.databaseSha256,
+          ),
+    );
+  }
+
+  @override
+  Future<void> deleteBank(String bankId) async {
+    if (_phase == ContentManagerPhase.downloading) {
+      throw const ContentImportException('题库正在下载或导入中，请稍候');
+    }
+    final full = _fullRepository;
+    if (full == null) {
+      throw const ContentImportException('当前没有已安装的题库');
+    }
+    final support = _supportDirectory ?? await getApplicationSupportDirectory();
+    final registry = BankRegistry(support.path);
+    await registry.load();
+    final bank = registry.byId(bankId);
+    if (bank == null) {
+      throw const ContentImportException('题库不存在或已删除');
+    }
+    // 先关连接再删文件，避免文件占用；期间仓库临时回退到演示题库。
+    final wasLastBank = registry.banks.length == 1;
+    full.close();
+    _fullRepository = null;
+    _repository = _seedRepository;
+    _phase = ContentManagerPhase.checking;
+    _stage = '正在删除题库';
+    notifyListeners();
+    try {
+      if (bank.id == BankInfo.officialId) {
+        for (final name in const [
+          'content.sqlite',
+          'content.sqlite-wal',
+          'content.sqlite-shm',
+          'content-installed.json',
+        ]) {
+          _deleteSilently(File('${support.path}${Platform.pathSeparator}$name'));
+        }
+      } else {
+        final directory = registry.bankDirectory(bank.id);
+        if (await directory.exists()) {
+          await directory.delete(recursive: true);
+        }
+      }
+      await registry.remove(bankId);
+      if (wasLastBank) {
+        // 删空：回到未安装状态（演示模式直接进入演示题库）。
+        _installedManifest = null;
+        _availableManifest = null;
+        _manifestCheckStarted = false;
+        if (kDemoContentFallback) {
+          _enterDemoFallback();
+        } else {
+          _phase = ContentManagerPhase.needsDownload;
+          _stage = '首次使用需要下载离线题库';
+        }
+      } else {
+        await reopenInstalled();
+      }
+    } on Object catch (error) {
+      _rememberError(error);
+      // 删文件失败则重新打开剩下的题库，不让应用停在无仓库状态。
+      try {
+        await reopenInstalled();
+      } on Object {
+        _repository = _seedRepository;
+      }
+    }
+    notifyListeners();
+  }
+
+  static void _deleteSilently(FileSystemEntity entity) {
+    try {
+      if (entity.existsSync()) entity.delete(recursive: true);
+    } on FileSystemException {
+      // 删除失败由上层 catch 走重开逻辑，这里不吞掉原始错误之外的路径。
+    }
+  }
 
   ContentPackageService get _service {
     final service = _packageService;
@@ -260,6 +385,7 @@ class ContentManager extends ContentManagerBase {
       final installed = await FullContentRepository.openInstalled(
         supportDirectory: _supportDirectory,
       );
+      await _syncOfficialRegistry(manifest);
       _fullRepository = installed;
       _repository = installed;
       _installedManifest = manifest;
@@ -349,7 +475,7 @@ class ContentManager extends ContentManagerBase {
       _progress = 1;
       _demoFallback = false;
       _phase = ContentManagerPhase.ready;
-      _stage = '题库导入完成：${summary.questionCount} 题 / ${summary.paperCount} 份卷子';
+      _stage = '题库导入完成：新增 ${summary.questionCount} 题';
       notifyListeners();
     } on Object catch (error) {
       _rememberError(error);

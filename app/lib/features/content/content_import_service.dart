@@ -8,8 +8,8 @@ import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+import '../../data/content/bank_registry.dart';
 import 'content_import_models.dart';
-import 'content_package_service.dart';
 
 // 题库导入的纯数据类型在 content_import_models.dart（web 图不触 sqlite3），
 // 这里 re-export 保证既有 import 方（content_manager.dart、测试）不用改。
@@ -59,7 +59,18 @@ class ContentImportService {
     report(0.05, '正在读取题库文件');
     final jsonString = await file.readAsString();
 
+    // 多题库追加制：bankId 取文件内容哈希前 10 位，同一文件重复导入
+    // 会命中同一个 id，天然判重；不同文件即使同名也能并存。
+    report(0.08, '正在计算题库指纹');
+    final fileSha256 = await _sha256File(path);
+    final bankId = 'imp_${fileSha256.substring(0, 10)}';
     final support = await _support;
+    final registry = BankRegistry(support.path);
+    await registry.load();
+    if (registry.containsId(bankId)) {
+      throw const ContentImportException('这套题库已经导入过，无需重复导入');
+    }
+
     final temporary = await _temporary;
     await support.create(recursive: true);
     final workDirectory = Directory(
@@ -82,55 +93,55 @@ class ContentImportService {
       // onProgress（ContentManager 的 ChangeNotifier，含 riverpod
       // provider 链）一起序列化，真机上报
       // "Illegal argument in isolate message: object is unsendable"。
-      final summary = await _parseInIsolate(jsonString, databaseTemporary.path);
+      final summary = await _parseInIsolate(
+        jsonString,
+        databaseTemporary.path,
+        idPrefix: bankId,
+      );
 
+      // 落盘到 banks/<bankId>/content.sqlite（原子：临时文件 rename 进
+      // 正式目录）。不再替换官方题库，两套题库并存。
       report(0.9, '正在安装离线题库');
+      final bankDirectory = registry.bankDirectory(bankId);
+      await bankDirectory.create(recursive: true);
       final databaseStaged = File(
-        '${support.path}${Platform.pathSeparator}content.sqlite.installing',
+        '${bankDirectory.path}${Platform.pathSeparator}content.sqlite.installing',
       );
-      final manifestStaged = File(
-        '${support.path}${Platform.pathSeparator}content-installed.json.installing',
-      );
-      await databaseStaged.parent.create(recursive: true);
       await _deleteFileIfExists(databaseStaged);
-      await _deleteFileIfExists(manifestStaged);
       await databaseTemporary.rename(databaseStaged.path);
       final databaseBytes = await databaseStaged.length();
       final databaseSha256 = await _sha256File(databaseStaged.path);
-      await manifestStaged.writeAsString(
-        jsonEncode({
-          'schemaVersion': 1,
-          'platform': 'android',
-          'format': 'sqlite-gzip',
-          'contentVersion': summary.contentVersion,
-          'minimumAppVersionCode': 0,
-          'questionCount': summary.questionCount,
-          'paperCount': summary.paperCount,
-          'imageCount': summary.imageCount,
-          'databaseBytes': databaseBytes,
-          'databaseSha256': databaseSha256,
-          'packageUrl': 'file://local-import',
-          'packageBytes': databaseBytes,
-          'packageSha256': databaseSha256,
-          'bankName': summary.name,
-        }),
-        flush: true,
+      databaseStaged.renameSync(
+        '${bankDirectory.path}${Platform.pathSeparator}content.sqlite',
       );
-      await ContentPackageService.promotePreparedInstall(support);
+      await registry.add(
+        BankInfo(
+          id: bankId,
+          name: summary.name,
+          source: 'imported',
+          contentVersion: summary.contentVersion,
+          questionCount: summary.questionCount,
+          paperCount: summary.paperCount,
+          imageCount: summary.imageCount,
+          databasePath: 'banks/$bankId/content.sqlite',
+          sha256: databaseSha256,
+          databaseBytes: databaseBytes,
+          installedAt: DateTime.now().toUtc().toIso8601String(),
+        ),
+      );
       await _deleteSilently(workDirectory);
       report(1, '题库导入完成');
-      return summary;
+      return summary.copyWith(bankId: bankId);
     } on Object {
-      // 失败时清掉工作目录与半成品，绝不碰现有已安装题库。
+      // 失败时清掉工作目录、半成品和可能已建的 bank 目录（登记表只有在
+      // 一切成功后才写入，所以不需要回滚）。
       await _deleteSilently(workDirectory);
-      const supportStaged = [
-        'content.sqlite.installing',
-        'content-installed.json.installing',
-      ];
-      for (final name in supportStaged) {
-        await _deleteSilently(
-          File('${support.path}${Platform.pathSeparator}$name'),
-        );
+      final bankDirectory = Directory(
+        '${support.path}${Platform.pathSeparator}banks'
+        '${Platform.pathSeparator}$bankId',
+      );
+      if (await bankDirectory.exists()) {
+        await _deleteSilently(bankDirectory);
       }
       rethrow;
     }
@@ -150,21 +161,25 @@ class ContentImportService {
     if (await file.exists()) await file.delete();
   }
 
-  /// 独立函数中转：让 Isolate.run 闭包只捕获两个 String 参数，
+  /// 独立函数中转：让 Isolate.run 闭包只捕获 String 参数，
   /// 不与 importFromFile 的 onProgress/this 共享作用域上下文。
   static Future<ImportedBankSummary> _parseInIsolate(
     String jsonString,
-    String databasePath,
-  ) {
-    return Isolate.run(() => _parseAndBuild(jsonString, databasePath));
+    String databasePath, {
+    String? idPrefix,
+  }) {
+    return Isolate.run(
+      () => _parseAndBuild(jsonString, databasePath, idPrefix),
+    );
   }
 
   /// 解析 + 建库 + 校验。在后台 isolate 里执行，只把小体积摘要带回主 isolate。
   static Future<ImportedBankSummary> _parseAndBuild(
     String jsonString,
     String databasePath,
+    String? idPrefix,
   ) async {
-    final bank = parseBankJson(jsonString);
+    final bank = parseBankJson(jsonString, idPrefix: idPrefix);
     final counts = await _buildDatabase(bank, databasePath);
     return ImportedBankSummary(
       name: bank.name,
@@ -189,7 +204,11 @@ class ContentImportService {
 
 /// 解析并校验题库 JSON。所有错误都带定位（如 papers[2].questions[5]），
 /// 方便作者对着大文件改错。纯函数，方便单测。
-ImportedBank parseBankJson(String source) {
+///
+/// [idPrefix] 非空时给所有题目/试卷/材料组/图片 id 加 `<prefix>:` 前缀：
+/// 多题库共存后全局 id 不能撞（官方库建库时已保证唯一，导入库靠这里
+/// 隔离）。判重和报错文案仍用原始 id，用户看到的还是自己写的编号。
+ImportedBank parseBankJson(String source, {String? idPrefix}) {
   Object? decoded;
   try {
     decoded = jsonDecode(source);
@@ -258,8 +277,8 @@ ImportedBank parseBankJson(String source) {
       if (bytes.isEmpty) {
         throw ContentImportException('images["$assetId"].data 解码后为空');
       }
-      images[assetId] = ImportedBankImage(
-        assetId: assetId,
+      images[prefixedId(assetId, idPrefix)] = ImportedBankImage(
+        assetId: prefixedId(assetId, idPrefix),
         mime: mime,
         bytes: bytes,
       );
@@ -279,7 +298,9 @@ ImportedBank parseBankJson(String source) {
       throw ContentImportException('$where 必须是对象');
     }
     final paperId = _requiredText(rawPaper['id'], '$where.id');
-    if (papers.any((paper) => paper.id == paperId)) {
+    if (papers.any(
+      (paper) => paper.id == prefixedId(paperId, idPrefix),
+    )) {
       throw ContentImportException('$where.id 与前面的试卷重复：$paperId');
     }
     final title = _requiredText(rawPaper['title'], '$where.title');
@@ -356,6 +377,7 @@ ImportedBank parseBankJson(String source) {
             value,
             '$at.options["$key"]',
             images,
+            idPrefix,
           );
         });
         if (answersEmpty) {
@@ -373,21 +395,32 @@ ImportedBank parseBankJson(String source) {
           if (!answers.contains(key)) answers.add(key);
         }
       }
-      final convertedStem = _convertImageMarkers(rawStem, '$at.stem', images);
+      final convertedStem = _convertImageMarkers(rawStem, '$at.stem', images, idPrefix);
       questions.add(
         ImportedBankQuestion(
-          id: id,
+          id: prefixedId(id, idPrefix),
           module: module,
           type: type,
           questionNo: questionNo,
-          groupId: groupId,
-          material: _convertImageMarkers(rawMaterial, '$at.material', images),
+          // 空材料组保持空串：抽题逻辑靠 group_id <> '' 识别「无组单题」。
+          groupId: groupId.isEmpty ? '' : prefixedId(groupId, idPrefix),
+          material: _convertImageMarkers(
+            rawMaterial,
+            '$at.material',
+            images,
+            idPrefix,
+          ),
           stem: convertedStem,
           // 从转换后的题干派生（原始 [[img:]] 未替换成渲染标记）。
           stemText: _deriveStemText(rawQuestion['stemText'], convertedStem),
           options: options,
           answers: answers,
-          solution: _convertImageMarkers(rawSolution, '$at.solution', images),
+          solution: _convertImageMarkers(
+            rawSolution,
+            '$at.solution',
+            images,
+            idPrefix,
+          ),
         ),
       );
     }
@@ -442,23 +475,31 @@ int? _optionalInt(Object? value, String where, {int? min, int? max}) {
   return parsed;
 }
 
+/// 多题库 id 前缀：导入库的所有 id 统一加 `<bankId>:` 保证跨库唯一。
+String prefixedId(String id, String? prefix) =>
+    prefix == null || prefix.isEmpty ? id : '$prefix:$id';
+
 /// `[[img:ID]]` → 官方渲染管线认识的 \ue000ID\ue001，并检查 ID 已定义。
+/// [idPrefix] 与 parseBankJson 一致：images 的 key 已带前缀，这里查找与
+/// 输出同步加前缀，markup 里的引用就指向合成后的 assetId。
 String _convertImageMarkers(
   String text,
   String where,
   Map<String, ImportedBankImage> images,
+  String? idPrefix,
 ) {
   if (!text.contains('[[')) return text;
   return text.replaceAllMapped(RegExp(r'\[\[\s*img\s*:\s*([^\]]+?)\s*\]\]'), (
     match,
   ) {
     final assetId = match.group(1)!;
-    if (!images.containsKey(assetId)) {
+    final resolved = prefixedId(assetId, idPrefix);
+    if (!images.containsKey(resolved)) {
       throw ContentImportException(
         '$where 引用了未定义的图片 "$assetId"（请在顶层 images 里补充）',
       );
     }
-    return '$imageMarkerOpen$assetId$imageMarkerClose';
+    return '$imageMarkerOpen$resolved$imageMarkerClose';
   });
 }
 
