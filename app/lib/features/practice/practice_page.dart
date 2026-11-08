@@ -1067,10 +1067,8 @@ class _PracticePageState extends ConsumerState<PracticePage>
     domain.QuestionContent question,
     DateTime? deadline,
   ) {
-    // 限时训练的档位存在会话上；普通会话为 null，跟全局设置。
-    final sessionLimit = _session?.questionLimitSeconds;
-    final questionTimeLimit =
-        sessionLimit ?? (ref.watch(questionTimeLimitProvider).value ?? 0);
+    // 限时档位只存在会话上（首页限时训练入口设置）；普通练习不限时。
+    final questionTimeLimit = _session?.questionLimitSeconds ?? 0;
     final showQuestionLimit = questionTimeLimit > 0;
     final moduleBudgets = deadline == null
         ? null
