@@ -128,14 +128,6 @@ final showTimerProvider = StreamProvider<bool>((ref) {
       .map((value) => value != 'false');
 });
 
-/// 单题限时（秒）。0 = 不限时（默认）。存 settings 表。
-final questionTimeLimitProvider = StreamProvider<int>((ref) {
-  return ref
-      .watch(databaseProvider)
-      .watchSetting('questionTimeLimitSec')
-      .map((value) => value == null ? 0 : int.tryParse(value) ?? 0);
-});
-
 /// 每日练习提醒：开关 + 提醒时间（分钟数）。
 final reminderEnabledProvider = StreamProvider<bool>((ref) {
   return ref
