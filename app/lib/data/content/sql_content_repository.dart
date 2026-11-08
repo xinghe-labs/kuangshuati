@@ -71,7 +71,9 @@ class SqlContentRepository implements ContentRepository {
       FROM papers
       WHERE (? = '' OR title LIKE ? OR region LIKE ?)
         AND (? IS NULL OR year = ?)
-      ORDER BY year DESC, title ASC
+      -- 导入时未组卷的散题自动归入「未组卷题目」虚拟卷，year 为 0；
+      -- 置顶展示，避免被真实年份的真题卷淹在列表底部。
+      ORDER BY (title = '未组卷题目') DESC, year DESC, title ASC
       ''',
       [normalized, '%$normalized%', '%$normalized%', year, year],
     );
