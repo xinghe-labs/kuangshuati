@@ -50,6 +50,12 @@
 
 ---
 
+## 🔗 Friend Links
+
+- 🐧 [**LinuxDO**](https://linux.do)
+
+---
+
 以下内容面向开发者。
 
 ## 快速开始
