@@ -210,12 +210,16 @@ void main() {
       expect(stages, contains('正在解析题库'));
       expect(stages.last, '题库导入完成');
 
-      // 落盘产物
-      expect(await File('${support.path}/content.sqlite').exists(), isTrue);
+      // 落盘产物：追加制 → banks/<bankId>/content.sqlite + banks.json，
+      // 不再替换根级官方库文件。
+      expect(summary.bankId, startsWith('imp_'));
       expect(
-        await File('${support.path}/content-installed.json').exists(),
+        await File(
+          '${support.path}/banks/${summary.bankId}/content.sqlite',
+        ).exists(),
         isTrue,
       );
+      expect(await File('${support.path}/banks.json').exists(), isTrue);
       // 工作目录已清理
       expect(
         await Directory('${temporary.path}/content-import').exists(),
@@ -228,10 +232,26 @@ void main() {
       final stats = await repository.stats();
       expect(stats.questionCount, 2);
       expect(stats.paperCount, 1);
-      final question = await repository.findQuestion('Q1');
+      // 导入库 id 带前缀，原始 id 直接查不到
+      expect(await repository.findQuestion('Q1'), isNull);
+      final question = await repository.findQuestion(
+        '${summary.bankId}:Q1',
+      );
       expect(question, isNotNull);
-      expect(question!.stem, contains('\ue000img1\ue001'));
+      expect(question!.stem, contains('\ue000${summary.bankId}:img1\ue001'));
       await repository.close();
+
+      // 同一文件重复导入被拒（sha256 判重）。
+      await expectLater(
+        service.importFromFile(file.path),
+        throwsA(
+          isA<ContentImportException>().having(
+            (e) => e.message,
+            'message',
+            contains('已经导入过'),
+          ),
+        ),
+      );
     });
 
     test('导入失败时旧题库完好（原子性）', () async {

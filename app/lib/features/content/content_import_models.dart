@@ -103,6 +103,7 @@ class ImportedBankSummary {
     required this.questionCount,
     required this.paperCount,
     required this.imageCount,
+    this.bankId,
   });
 
   final String name;
@@ -110,4 +111,16 @@ class ImportedBankSummary {
   final int questionCount;
   final int paperCount;
   final int imageCount;
+
+  /// 多题库追加制：本次导入登记的 bankId（追加进题库列表后可用）。
+  final String? bankId;
+
+  ImportedBankSummary copyWith({String? bankId}) => ImportedBankSummary(
+    name: name,
+    contentVersion: contentVersion,
+    questionCount: questionCount,
+    paperCount: paperCount,
+    imageCount: imageCount,
+    bankId: bankId ?? this.bankId,
+  );
 }

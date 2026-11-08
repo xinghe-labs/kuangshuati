@@ -32,6 +32,15 @@ abstract class ContentManagerBase extends ChangeNotifier {
   /// 远端是否有比本地新的题库版本。
   bool get updateAvailable;
 
+  /// 已安装题库列表（题库管理页展示）。无题库（未安装/演示模式）时为空。
+  List<InstalledBankView> get installedBanks => const [];
+
+  /// 删除一套已安装题库（连文件一起删）。删空后回到未安装状态。
+  /// Web 端单库制，不支持删除，抛 UnsupportedError。
+  Future<void> deleteBank(String bankId) async {
+    throw UnsupportedError('当前平台不支持删除题库');
+  }
+
   /// 检查远端清单。未安装题库时也用它拿下载地址。
   Future<void> checkForManifest();
 
@@ -41,7 +50,7 @@ abstract class ContentManagerBase extends ChangeNotifier {
   /// 仅在用户主动点「检查更新」时调用。
   Future<void> refresh();
 
-  /// 从本地 JSON 文件导入自制题库，替换当前题库。
+  /// 从本地 JSON 文件导入自制题库，追加为新题库（不替换已有题库）。
   ///
   /// 进度通过 [onProgress] 回调（0~1 与阶段文案），供设置页弹窗展示；
   /// 失败抛 ContentImportException（message 已是用户可读文案）。
@@ -50,4 +59,34 @@ abstract class ContentManagerBase extends ChangeNotifier {
     String path, {
     void Function(double progress, String stage)? onProgress,
   });
+}
+
+/// 题库管理页展示用的一套题库摘要。
+///
+/// 刻意不含路径等 IO 信息：接口要同时被原生（dart:io）和 Web 端实现，
+/// Web 图编不进 dart:io。
+class InstalledBankView {
+  const InstalledBankView({
+    required this.id,
+    required this.name,
+    required this.source,
+    required this.contentVersion,
+    required this.questionCount,
+    required this.paperCount,
+    required this.imageCount,
+    this.databaseBytes,
+  });
+
+  final String id;
+  final String name;
+
+  /// `official`（下载安装）或 `imported`（本地导入）。
+  final String source;
+  final String contentVersion;
+  final int questionCount;
+  final int paperCount;
+  final int imageCount;
+
+  /// sqlite 文件字节数（题库管理页显示占用大小）。
+  final int? databaseBytes;
 }
