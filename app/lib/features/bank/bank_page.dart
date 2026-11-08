@@ -263,6 +263,9 @@ class _PaperRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 导入库的顶层散题自动归入「未组卷题目」虚拟卷（year 为 0、
+    // id 固定 _loose）：按标题识别，年份块改显「散题」标记。
+    final isLoose = paper.title == '未组卷题目';
     return Container(
       color: AppColors.surface,
       child: InkWell(
@@ -275,11 +278,11 @@ class _PaperRow extends StatelessWidget {
                 width: 50,
                 height: 58,
                 alignment: Alignment.center,
-                color: AppColors.ink,
+                color: isLoose ? AppColors.softFill : AppColors.ink,
                 child: Text(
-                  '${paper.year}',
+                  isLoose ? '散题' : '${paper.year}',
                   style: TextStyle(
-                    color: AppColors.onInk,
+                    color: isLoose ? AppColors.ink : AppColors.onInk,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
@@ -296,8 +299,10 @@ class _PaperRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      '${paper.region} · ${paper.paperType} · '
-                      '${paper.durationSeconds ~/ 60} 分钟',
+                      isLoose
+                          ? '${paper.region} · ${paper.durationSeconds ~/ 60} 分钟的散题合集，不限卷面顺序'
+                          : '${paper.region} · ${paper.paperType} · '
+                                '${paper.durationSeconds ~/ 60} 分钟',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
