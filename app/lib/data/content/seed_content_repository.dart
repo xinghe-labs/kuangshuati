@@ -269,6 +269,15 @@ class SeedContentRepository implements ContentRepository {
   }
 
   @override
+  Map<String, int> moduleCounts() {
+    final counts = <String, int>{};
+    for (final question in questions) {
+      counts[question.module] = (counts[question.module] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  @override
   List<QuestionContent> sequenceQuestions({
     int limit = 100,
     Iterable<String> excludeIds = const [],

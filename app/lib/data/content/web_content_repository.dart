@@ -168,6 +168,9 @@ class WebContentRepository implements ContentRepository {
       _inner.randomQuestions(count, module: module);
 
   @override
+  Future<Map<String, int>> moduleCounts() => _inner.moduleCounts();
+
+  @override
   Future<List<QuestionContent>> sequenceQuestions({
     int limit = 100,
     Iterable<String> excludeIds = const [],

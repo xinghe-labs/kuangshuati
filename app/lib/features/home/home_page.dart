@@ -9,6 +9,7 @@ import '../../core/theme/app_theme.dart';
 import '../../data/database/app_database.dart';
 import '../../domain/models.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../practice/mock_paper.dart';
 import '../practice/practice_launcher.dart';
 import '../practice/time_budget.dart';
 import '../settings/settings_platform_io.dart'
@@ -137,6 +138,13 @@ class _HomePageState extends ConsumerState<HomePage> {
               icon: Icons.hourglass_bottom,
               onTap: () => _startTimedTraining(context, ref),
             ),
+            _ActionTile(
+              index: '06',
+              title: '随机模考',
+              detail: '按题库占比随机组卷，限时作答',
+              icon: Icons.casino_outlined,
+              onTap: () => _startRandomMock(context, ref),
+            ),
           ],
         ),
         const SizedBox(height: 22),
@@ -217,6 +225,25 @@ class _HomePageState extends ConsumerState<HomePage> {
       questions: questions,
       requestedCount: 20,
       questionLimitSeconds: picked,
+    );
+  }
+
+  // 随机模考：按题库各模块占比随机组一套整卷，限时模考、
+  // 交卷后统一判分。练完即散，不保存试卷（docs/random-mock-paper.md）。
+  Future<void> _startRandomMock(BuildContext context, WidgetRef ref) async {
+    final picked = await showModalBottomSheet<({int count, RandomMockMix mix})>(
+      context: context,
+      // 配置项多（题量+配比+预览），允许撑到接近全屏；
+      // 内容再配合 SingleChildScrollView，小屏/大字号也不溢出。
+      isScrollControlled: true,
+      builder: (sheetContext) => const _RandomMockSheet(),
+    );
+    if (picked == null || !context.mounted) return;
+    await launchRandomMock(
+      context,
+      ref,
+      targetCount: picked.count,
+      mix: picked.mix,
     );
   }
 
@@ -642,6 +669,137 @@ String _dayKey(DateTime value) {
   return '${value.year}-$month-$day';
 }
 
+/// 随机模考的配置弹层：题量档位 + 配比方式，确认前预览
+/// 「预计题数 / 整卷时长」。
+///
+/// 预计题数用 achievableRandomMockCount 估算（与启动器同一套纯函数），
+/// 题库不足时如实提示；模块分布拿不到（旧版仓库实现）时退化为
+/// 纯随机整卷抽题，显示名义题量。读取失败不拦确认——启动器里
+/// 会再次尝试并给出真实错误。
+class _RandomMockSheet extends ConsumerStatefulWidget {
+  const _RandomMockSheet();
+
+  @override
+  ConsumerState<_RandomMockSheet> createState() => _RandomMockSheetState();
+}
+
+class _RandomMockSheetState extends ConsumerState<_RandomMockSheet> {
+  int _count = 130;
+  RandomMockMix _mix = RandomMockMix.paperStructure;
+
+  late final Future<Map<String, int>> _countsFuture = _loadModuleCounts();
+
+  Future<Map<String, int>> _loadModuleCounts() async =>
+      await ref.read(contentRepositoryProvider).moduleCounts();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '随机模考',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '按题库各模块占比随机抽题，组一套整卷。限时作答，交卷后统一判分；练完即散，不保存试卷。',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 16),
+            Text('题量', style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final choice in randomMockQuestionChoices)
+                  ChoiceChip(
+                    label: Text('$choice 题'),
+                    selected: _count == choice,
+                    onSelected: (_) => setState(() => _count = choice),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text('配比', style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('真题结构'),
+                  selected: _mix == RandomMockMix.paperStructure,
+                  onSelected: (_) =>
+                      setState(() => _mix = RandomMockMix.paperStructure),
+                ),
+                ChoiceChip(
+                  label: const Text('均匀分配'),
+                  selected: _mix == RandomMockMix.even,
+                  onSelected: (_) =>
+                      setState(() => _mix = RandomMockMix.even),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            FutureBuilder<Map<String, int>>(
+              future: _countsFuture,
+              builder: (context, snapshot) {
+                final available = snapshot.data;
+                final expected = available == null || available.isEmpty
+                    ? _count
+                    : achievableRandomMockCount(
+                        availableByModule: available,
+                        total: _count,
+                        mix: _mix,
+                      );
+                final duration = randomMockDurationSeconds(expected);
+                final bankTotal =
+                    available?.values.fold(0, (sum, item) => sum + item) ?? 0;
+                final insufficient =
+                    bankTotal > 0 && expected < _count;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (insufficient)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          '题库共 $bankTotal 题，本次预计组成 $expected 题（目标 $_count）',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: AppColors.negative),
+                        ),
+                      ),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () => Navigator.of(context).pop(
+                          (count: _count, mix: _mix),
+                        ),
+                        child: Text(
+                          '开始 · 预计 $expected 题 · ${formatLimitClock(duration)}',
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 /// 限时训练的档位选择弹层。
 ///
 /// 档位来自 time_budget.dart 的同一组常量（45/60/75/90/120 秒），
