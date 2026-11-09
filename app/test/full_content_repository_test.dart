@@ -61,7 +61,7 @@ void main() {
         expect(stats.questionCount, 58890);
         expect(stats.paperCount, 515);
         expect(stats.imageCount, 39196);
-        expect(stats.contentVersion, '2026-10-25');
+        expect(stats.contentVersion, '2026-10-25.1');
 
         final papers = await repository.searchPapers(query: '国考', year: 2026);
         expect(papers, isNotEmpty);
