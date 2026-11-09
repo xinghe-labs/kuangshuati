@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../content/bank_format_help.dart';
 import '../content/bank_manager_page.dart';
 import '../content/content_import_models.dart';
 import '../content/content_manager_base.dart';
@@ -195,9 +196,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _SettingTile(
               icon: Icons.upload_file_outlined,
               title: '导入题库',
-              subtitle: '从本地 JSON 文件导入自制题库，与现有题库并存',
+              subtitle: '从本地 JSON 导入自制题库，与现有题库并存；不确定格式可看示例',
               trailing: const Icon(Icons.chevron_right, size: 20),
-              onTap: () => _importQuestionBank(),
+              onTap: () => _openImportSheet(),
             ),
             _divider,
             for (final action in SettingsPlatform.dataActions()) ...[
@@ -266,6 +267,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   /// 导入本地题库 JSON：选文件 → 确认 → 不可关进度弹窗 → 结果提示。
   /// 仓库切换由 ContentManager 完成，首页统计随 provider 自动刷新。
+  /// 导入题库是单一入口：先选「导入文件」还是「看格式示例」，
+  /// 不再在设置里摆两个看起来重复的条子。
+  Future<void> _openImportSheet() async {
+    final choice = await showModalBottomSheet<_ImportChoice>(
+      context: context,
+      builder: (_) => const _ImportBankSheet(),
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case _ImportChoice.file:
+        await _importQuestionBank();
+      case _ImportChoice.format:
+        await _showBankFormatHelp();
+    }
+  }
+
+  /// 导入格式说明：要点 + 可复制的最小示例（内容见 bank_format_help.dart）。
+  Future<void> _showBankFormatHelp() =>
+      showDialog<void>(context: context, builder: (_) => const BankFormatHelpDialog());
+
   Future<void> _importQuestionBank() async {
     final manager = ref.read(contentManagerProvider);
     if (manager.phase == ContentManagerPhase.downloading) {
@@ -496,6 +517,53 @@ class _UpdatePill extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w600,
         ),
+      ),
+    );
+  }
+}
+
+/// 「导入题库」底部选择的结果。
+enum _ImportChoice { file, format }
+
+/// 导入题库的入口面板：选文件，或者先看格式示例。
+class _ImportBankSheet extends StatelessWidget {
+  const _ImportBankSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 18, 20, 4),
+            child: Text(
+              '导入题库',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Text(
+              '从本地 JSON 文件导入自制题库，与现有题库并存。'
+              '练习记录、错题本和统计不受影响。',
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.upload_file_outlined),
+            title: const Text('选择 JSON 文件'),
+            subtitle: const Text('从手机里挑一个 .json 文件导入'),
+            onTap: () => Navigator.of(context).pop(_ImportChoice.file),
+          ),
+          ListTile(
+            leading: const Icon(Icons.description_outlined),
+            title: const Text('查看格式与示例'),
+            subtitle: const Text('必填字段、图片写法，可复制最小示例'),
+            onTap: () => Navigator.of(context).pop(_ImportChoice.format),
+          ),
+          const SizedBox(height: 8),
+        ],
       ),
     );
   }

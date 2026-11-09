@@ -40,6 +40,7 @@
 
 - **真离线**：题库与题图全部落在本地 SQLite，装好题库断网可用。
 - **六种练习入口**：顺序、随机、试卷、错题复习、自定义组卷、整卷模考（含按题库模块占比随机组卷的「随机模考」）；逐题解析或交卷后统一出解析。
+- **自定义题库**：导入自己整理的 JSON 题库（支持图片、多选、主观自评题），与官方题库并存，练习记录互不干扰；格式见 [docs/question-bank-format.md](docs/question-bank-format.md)；App 内「设置 → 导入题库 → 查看格式与示例」也有一份可复制的最小示例。
 - **完整闭环**：作答 → 判题 → 解析 → 结果 → 错题入册 → 到期复习；中断后能接着上次的进度继续。
 - **统计与备份**：作答统计、最近练习正确率、跨端 `.gkbackup` 备份与恢复（原生端与 Web 端互导已实测）。
 - **体验细节**：资料分析题图内联排版、深色模式跟随系统、键盘作答与快捷键、模考倒计时自动交卷。
@@ -114,13 +115,20 @@ app/                  # Flutter 应用主体
   lib/features/       # 按功能划分的页面与状态（practice、papers、stats…）
   lib/shared/         # 跨功能共享的组件
   web/                # Web 端入口（sqlite3.wasm、drift_worker）
-docs/                 # 题库内容清单格式示例
+docs/                 # 内容清单示例、自定义题库格式文档与示例
 .github/workflows/    # CI（静态分析+测试）、iOS 编译验证、Web 试用版部署
 ```
 
 ## 题库数据
 
-题库数据**不在本仓库内**。`docs/content-manifest.example.json` 提供内容清单的格式示例，应用首次启动时会引导下载题库包。
+题库数据**不在本仓库内**。这里有两个容易混的 JSON，用途完全不同：
+
+| 文件 | 用途 |
+| --- | --- |
+| [`docs/content-manifest.example.json`](docs/content-manifest.example.json) | **官方题库包的清单**。应用首次启动按它下载题库包，普通用户不用管。 |
+| [`docs/question-bank-format.md`](docs/question-bank-format.md) | **自定义题库的导入格式**。自己整理题库时看这个，可导入的完整示例见 [`docs/question-bank.example.json`](docs/question-bank.example.json)。 |
+
+导入入口在「设置 → 导入题库」，里面两个选项：「选择 JSON 文件」直接导入，「查看格式与示例」给出必填字段与可复制的最小示例。
 
 ## 许可证与题库版权
 
