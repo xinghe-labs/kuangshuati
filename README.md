@@ -26,10 +26,20 @@
 
 不想编译源码？直接从 [Releases](https://github.com/xinghe-labs/kuangshuati/releases) 下载最新 APK（当前 v1.0.8）。首次启动在应用内下载题库（约 145 MB，SHA-256 校验后安装），之后全程离线。
 
+### 在线试用（不用装）
+
+**👉 [xinghe-labs.github.io/kuangshuati](https://xinghe-labs.github.io/kuangshuati/)**
+
+浏览器直接打开就能点：练习流程、逐题解析、整卷模考倒计时、交卷后统一判分、错题本、统计都能跑通。
+
+> ⚠️ 试用版只内置 **12 道演示题**（完整题库源自私有仓库，不随公开版分发）。想真正刷真题，请下载 APK。
+>
+> 试用版数据存在浏览器本地，清理站点数据即清空。
+
 ## 功能
 
 - **真离线**：题库与题图全部落在本地 SQLite，装好题库断网可用。
-- **六种练习入口**：顺序、随机、试卷、错题复习、自定义组卷、整卷模考；逐题解析或交卷后统一出解析。
+- **六种练习入口**：顺序、随机、试卷、错题复习、自定义组卷、整卷模考（含按题库模块占比随机组卷的「随机模考」）；逐题解析或交卷后统一出解析。
 - **完整闭环**：作答 → 判题 → 解析 → 结果 → 错题入册 → 到期复习；中断后能接着上次的进度继续。
 - **统计与备份**：作答统计、最近练习正确率、跨端 `.gkbackup` 备份与恢复（原生端与 Web 端互导已实测）。
 - **体验细节**：资料分析题图内联排版、深色模式跟随系统、键盘作答与快捷键、模考倒计时自动交卷。
@@ -44,7 +54,7 @@
 ## Roadmap
 
 - [x] Android 正式发布（v1.0.8）
-- [x] Web 构建支持
+- [x] Web 构建支持，在线试用版已部署到 GitHub Pages
 - [ ] iOS 支持：代码同构，CI 已做编译验证；缺签名证书，上架时间待定
 - [ ] 题库内容更新：应用内已支持版本检查，公开的更新节奏待定
 
@@ -72,9 +82,25 @@ flutter run
 Web 版：
 
 ```bash
-flutter run -d chrome        # 本地调试
-flutter build web            # 构建产物在 build/web
+flutter run -d chrome --target=lib/main_web.dart        # 本地调试
+flutter build web --target=lib/main_web.dart            # 构建产物在 build/web
 ```
+
+Web 端有独立入口 `lib/main_web.dart`（原生入口 `lib/main.dart` 依赖 `dart:ffi`/sqlite3，不能用于 Web 构建）。
+
+公开在线试用版由 `.github/workflows/web-demo.yml` 自动构建部署，额外加两个参数：
+
+```bash
+flutter build web --release \
+  --target=lib/main_web.dart \
+  --dart-define=KSQ_WEB_TRIAL=seed \
+  --base-href=/kuangshuati/
+```
+
+- `KSQ_WEB_TRIAL=seed`：跳过题库下载流程，直接用内置的 12 道演示题（公开试用版不能分发私有题库）；
+- `--base-href=/kuangshuati/`：GitHub Pages 的仓库子路径。
+
+不带 `KSQ_WEB_TRIAL=seed` 时，Web 版走正常题库下载流程，行为与之前一致。
 
 测试：
 
@@ -95,7 +121,7 @@ app/                  # Flutter 应用主体
   lib/shared/         # 跨功能共享的组件
   web/                # Web 端入口（sqlite3.wasm、drift_worker）
 docs/                 # 题库内容清单格式示例
-.github/workflows/    # CI（静态分析+测试）、iOS 编译验证
+.github/workflows/    # CI（静态分析+测试）、iOS 编译验证、Web 试用版部署
 ```
 
 ## 题库数据

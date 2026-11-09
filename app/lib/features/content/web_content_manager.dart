@@ -23,13 +23,22 @@ import 'gzip_web.dart' if (dart.library.io) 'gzip_stub.dart';
 ///
 /// 所以这里的「进度」指的是核心库的下载进度，不是整个题库。
 class WebContentManager extends ContentManagerBase {
-  WebContentManager({required Uri baseUri, http.Client? client})
-    : this._(baseUri, client ?? http.Client());
+  /// [demoMode] 为 true 时跳过题库下载流程，直接用内置演示题库（12 题）。
+  ///
+  /// 用于公开在线试用版（GitHub Pages）：正式题库核心包源自私有仓库，
+  /// 不能公开分发，而且几十 MiB 的下载也不适合“先试试”。
+  /// 正式构建不传此参数，行为完全不变。
+  WebContentManager({
+    required Uri baseUri,
+    http.Client? client,
+    bool demoMode = false,
+  }) : this._(baseUri, client ?? http.Client(), demoMode);
 
-  WebContentManager._(this._baseUri, this._client);
+  WebContentManager._(this._baseUri, this._client, this._demoMode);
 
   final Uri _baseUri;
   final http.Client _client;
+  final bool _demoMode;
 
   ContentRepository _repository = SeedContentRepository();
   ContentManagerPhase _phase = ContentManagerPhase.checking;
@@ -78,6 +87,13 @@ class WebContentManager extends ContentManagerBase {
 
   /// 打开浏览器里已有的题库副本（如果有）。没有就让页面去下载。
   Future<void> initialize() async {
+    if (_demoMode) {
+      // 演示模式：不碰网络，内置题库直接就绪。
+      _phase = ContentManagerPhase.ready;
+      _stage = '演示模式 · 内置示例题';
+      _notify();
+      return;
+    }
     _phase = ContentManagerPhase.checking;
     _stage = '正在检查题库';
     _notify();
@@ -129,7 +145,8 @@ class WebContentManager extends ContentManagerBase {
 
   @override
   Future<void> checkForManifest({bool silent = false}) async {
-    if (_phase == ContentManagerPhase.downloading) return;
+    // 演示模式无题库可查，保持 ready，不发网络请求。
+    if (_demoMode || _phase == ContentManagerPhase.downloading) return;
     if (_manifestCheckStarted && silent) return;
     _manifestCheckStarted = true;
     if (!silent) {
@@ -178,6 +195,9 @@ class WebContentManager extends ContentManagerBase {
 
   @override
   Future<void> downloadAndInstall() {
+    // 演示模式没有可下载的题库（下载门页面不会出现在 ready 阶段，
+    // 这是防手动触发的兜底），直接返回。
+    if (_demoMode) return Future.value();
     // 页面初始化时 checkForManifest 与自动下载可能同时触发；drift 对同一个
     // databaseName 只会保留第一个 worker，第二个连接的初始化端口会被丢弃，
     // 于是永远等不到初始数据。这里用单飞（single-flight）保证只有一个安装。

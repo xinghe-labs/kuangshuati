@@ -18,6 +18,12 @@ const String _contentBaseUrl = String.fromEnvironment(
   defaultValue: 'content/',
 );
 
+/// 公开在线试用开关：--dart-define=KSQ_WEB_TRIAL=seed 时，
+/// 跳过题库下载流程，直接用内置演示题库（12 题）。
+/// 正式部署不带此 define，行为不变。
+const String _webTrialMode = String.fromEnvironment('KSQ_WEB_TRIAL');
+const bool _webTrialDemo = _webTrialMode == 'seed';
+
 /// 构建戳：用于确认浏览器加载的是哪一次构建，避免被旧产物误导。
 const String _buildStamp = 'BUILDSTAMP-20261029-A';
 
@@ -34,7 +40,10 @@ Future<ProviderScope> buildKuangshuatiWebApp({
 }) async {
   final manager =
       contentManager ??
-      WebContentManager(baseUri: Uri.parse(_contentBaseUrl));
+      WebContentManager(
+        baseUri: Uri.parse(_contentBaseUrl),
+        demoMode: _webTrialDemo,
+      );
   await manager.initialize();
   final stats = await manager.repository.stats();
   debugPrint(

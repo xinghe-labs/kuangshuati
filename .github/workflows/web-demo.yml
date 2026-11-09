@@ -1,0 +1,76 @@
+name: Web Demo
+
+# 把 Web 在线试用版发布到 GitHub Pages（https://xinghe-labs.github.io/kuangshuati/）。
+#
+# 试用版用内置的 12 道演示题（--dart-define=KSQ_WEB_TRIAL=seed），
+# 不需要也不使用完整题库：正式题库核心包源自私有仓库，不能公开分发，
+# 而且几十 MiB 的下载也不适合"先试试"。
+#
+# 本工作流只读公开代码，不接触任何私有资源或密钥。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - ".github/workflows/web-demo.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.1
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      # 仓库名即 Pages 子路径（kuangshuati → /kuangshuati/）。
+      - name: Build web demo
+        run: |
+          flutter build web \
+            --release \
+            --target=lib/main_web.dart \
+            --dart-define=KSQ_WEB_TRIAL=seed \
+            --base-href="/${{ github.event.repository.name }}/"
+
+      # Pages 默认不开 Jekyll；关掉可避免下划线开头的资源被过滤。
+      - name: Disable Jekyll
+        run: touch build/web/.nojekyll
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
