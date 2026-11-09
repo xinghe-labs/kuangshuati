@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../../domain/models.dart';
@@ -15,6 +16,16 @@ class SqlContentRepository implements ContentRepository {
 
   final SqlExecutor _executor;
   final Map<String, dynamic> _manifest;
+  final math.Random _random = math.Random();
+
+  /// 抽题索引缓存（全库一份，按模块在内存里筛）。
+  ///
+  /// 题库文件只读，同一份库的题目构成不会变；而随机抽题原先每次都让
+  /// SQLite 全表扫一遍再排序（实测「随机 20 题」540 ms，随机模考 6 个
+  /// 模块 4.8 s）。装载一次后，每次抽题只按主键取行。
+  ///
+  /// 存 Future 而不是结果：随机模考会连续调用，避免并发时重复装载。
+  Future<_QuestionIndex>? _index;
 
   /// 给平台特有的实现（如 Web 的按需取图）用的底层查询入口。
   /// 只在同一个 data 层内部使用，页面代码不应该直接拿它拼 SQL。
@@ -177,62 +188,110 @@ class SqlContentRepository implements ContentRepository {
     //   1) 43 904 道题的上游 groupId 为空，全部塔缩成一个伪组（group_id=''）；
     //   2) 存在 35/50/60 题的超大材料组，装不进 20 题练习。
     // 只有“整组能完整装进本次题量”的材料组才整组抽。
-    final units = await _executor.select(
-      '''
-      SELECT group_id, COUNT(*) AS n
-      FROM questions
-      WHERE (? IS NULL OR module = ?) AND group_id <> ''
-      GROUP BY group_id
-      HAVING COUNT(*) <= ?
-      ORDER BY RANDOM()
-      ''',
-      [module, module, count],
-    );
-    final chosenGroups = <String>[];
+    final index = await _questionIndex();
+    // 随机完全在 Dart 里做，不交给 SQL 的 `ORDER BY RANDOM()`：后者会让
+    // SQLite 为整库建临时排序表，而随机抽题并不需要 SQL 排任何东西。
+    final groupIds = [
+      for (final entry in index.byGroup.entries)
+        if ((module == null || index.groupModule[entry.key] == module) &&
+            entry.value.length <= count)
+          entry.key,
+    ]..shuffle(_random);
+    final chosen = <String>{};
     var planned = 0;
-    for (final row in units) {
+    for (final groupId in groupIds) {
       if (planned >= count) break;
-      final n = row['n'] as int;
+      final size = index.byGroup[groupId]!.length;
       // 整组抽题不能把总题量撑过 count：放不下就跳过这组，
       // 由后面的单题补齐。否则随机 20 题会抽成 24 题。
-      if (planned + n > count) continue;
-      chosenGroups.add(row['group_id'] as String);
-      planned += n;
+      if (planned + size > count) continue;
+      chosen.add(groupId);
+      planned += size;
     }
-    final picked = <QuestionContent>[];
-    if (chosenGroups.isNotEmpty) {
-      final placeholders = List.filled(chosenGroups.length, '?').join(', ');
-      picked.addAll(
-        (await _executor.select(
-          '''
-              SELECT *
-              FROM questions
-              WHERE group_id IN ($placeholders) AND (? IS NULL OR module = ?)
-              ORDER BY group_id, sequence, question_no
-              ''',
-          [...chosenGroups, module, module],
-        )).map(_questionFromRow),
+    final ids = <String>[
+      for (final groupId in chosen) ...index.byGroup[groupId]!,
+    ];
+    if (ids.length < count) {
+      // 剩余的由无材料分组的单题和装不进本组练习的大组补足。
+      final used = ids.toSet();
+      final pool = module == null
+          ? index.allIds
+          : (index.idsByModule[module] ?? const <String>[]);
+      ids.addAll(
+        _sample([
+          for (final id in pool)
+            if (!used.contains(id)) id,
+        ], count - ids.length),
       );
     }
-    if (picked.length < count) {
-      // 剩余的由无材料分组的单题和装不进本组练习的大组补足，逐个随机。
-      final exclude = chosenGroups.isEmpty
-          ? ''
-          : 'AND group_id NOT IN (${List.filled(chosenGroups.length, '?').join(', ')})';
-      picked.addAll(
-        (await _executor.select(
-          '''
-              SELECT *
-              FROM questions
-              WHERE (? IS NULL OR module = ?) $exclude
-              ORDER BY RANDOM()
-              LIMIT ?
-              ''',
-          [module, module, ...chosenGroups, count - picked.length],
-        )).map(_questionFromRow),
-      );
+    return questionsByIds(ids);
+  }
+
+  /// 从 [pool] 里随机挑 [k] 个。
+  ///
+  /// 只做 k 次取下标，不洗整个池：全库 5.9 万个 id 洗一遍每次都要几毫秒，
+  /// 而一次练习只取 20 个。
+  List<String> _sample(List<String> pool, int k) {
+    if (k <= 0) return const <String>[];
+    // 取得多时直接洗牌更快（否则要重试到抽满）。
+    if (k * 2 >= pool.length) {
+      return (List<String>.of(pool)..shuffle(_random)).take(k).toList();
+    }
+    final taken = <int>{};
+    final picked = <String>[];
+    while (picked.length < k) {
+      final i = _random.nextInt(pool.length);
+      if (taken.add(i)) picked.add(pool[i]);
     }
     return picked;
+  }
+
+  /// 装载抽题索引（题目 id 清单 + 材料组），整个仓储生命周期只装载一次。
+  Future<_QuestionIndex> _questionIndex() =>
+      _index ??= _loadIndex();
+
+  Future<_QuestionIndex> _loadIndex() async {
+    final rows = await _executor.select(
+      '''
+      SELECT id, module, group_id, sequence, question_no
+      FROM questions
+      ''',
+    );
+    final idsByModule = <String, List<String>>{};
+    final grouped = <String, List<(int, int, String)>>{};
+    final groupModule = <String, String>{};
+    for (final row in rows) {
+      final id = row['id'] as String;
+      final module = (row['module'] as String?) ?? '';
+      (idsByModule[module] ??= []).add(id);
+      final groupId = (row['group_id'] as String?) ?? '';
+      if (groupId.isEmpty) continue;
+      groupModule[groupId] = module;
+      (grouped[groupId] ??= []).add((
+        (row['sequence'] as int?) ?? 0,
+        (row['question_no'] as int?) ?? 0,
+        id,
+      ));
+    }
+    // 组内按 sequence / question_no 排好：材料题（1）（2）（3）必须按原序
+    // 呈现，否则会出现先问（3）再问（1）。
+    final byGroup = <String, List<String>>{
+      for (final entry in grouped.entries)
+        entry.key:
+            ([...entry.value]..sort((a, b) {
+                  final bySequence = a.$1.compareTo(b.$1);
+                  return bySequence != 0
+                      ? bySequence
+                      : a.$2.compareTo(b.$2);
+                }))
+                .map((item) => item.$3)
+                .toList(growable: false),
+    };
+    return _QuestionIndex(
+      idsByModule: idsByModule,
+      byGroup: byGroup,
+      groupModule: groupModule,
+    );
   }
 
   @override
@@ -384,4 +443,33 @@ class SqlContentRepository implements ContentRepository {
 
   @override
   Future<void> close() => _executor.close();
+}
+
+/// 抽题索引：题目 id 清单与材料组，按模块切好。
+///
+/// 建它的目的是把随机性从 SQL 里拿出来：`ORDER BY RANDOM()` 必须让 SQLite
+/// 扫全表再排序，而这份索引装载一次后，抽题只剩「按主键取 20 行」。
+class _QuestionIndex {
+  _QuestionIndex({
+    required this.idsByModule,
+    required this.byGroup,
+    required this.groupModule,
+  });
+
+  /// module -> 该模块全部题目 id（顺序无意义，抽题时随机挑）。
+  final Map<String, List<String>> idsByModule;
+
+  /// group_id -> 组内题目 id（已按 sequence / question_no 排好）。
+  /// 空 group_id 的题目不在这里（它们按单题抽）。
+  final Map<String, List<String>> byGroup;
+
+  /// group_id -> 所属模块，用于按模块筛材料组。
+  final Map<String, String> groupModule;
+
+  List<String>? _allIds;
+
+  /// 全库题目 id（跨模块抽题时用），首次访问时拼好。
+  List<String> get allIds => _allIds ??= [
+    for (final ids in idsByModule.values) ...ids,
+  ];
 }

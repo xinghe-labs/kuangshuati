@@ -311,12 +311,17 @@ class _InlineAssetImageState extends ConsumerState<_InlineAssetImage> {
           );
         }
         final ratio = image.width / image.height;
+        final displayWidth = widget.targetHeight * ratio;
         final imageWidget = Image.memory(
           image.bytes,
           height: widget.targetHeight,
-          width: widget.targetHeight * ratio,
+          width: displayWidth,
           fit: BoxFit.contain,
           gaplessPlayback: true,
+          // 按显示尺寸解码，而不是原图像素：行内公式图在这里只占三十来
+          // 像素，而源图可能有一两千像素宽，不限制就是几百倍的内存浪费。
+          cacheWidth: (displayWidth * MediaQuery.devicePixelRatioOf(context))
+              .round(),
         );
         // 公式图是白底黑字导出的灰度位图（实测最亮像素只有 #585858），
         // 深色模式下直接把黑字放在深底上，分母几乎和背景融在一起。
@@ -407,17 +412,29 @@ class _BlockAssetImageState extends ConsumerState<_BlockAssetImage> {
           );
         }
         final isLarge = image.height > _kBlockImageMaxHeight;
+        final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
         final imageWidget = ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 380),
-          child: Image.memory(
-            image.bytes,
-            fit: BoxFit.contain,
-            alignment: Alignment.centerLeft,
-            gaplessPlayback: true,
-            errorBuilder: (context, error, stackTrace) => Text(
-              '图片无法显示',
-              style: TextStyle(color: AppColors.muted, fontSize: 12),
-            ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // 题图源图实测最宽 3000+ 像素，而列表里最宽也就屏幕宽度。
+              // 按可用宽度解码，避免每张图都占几十 MB 的解码内存。
+              final available = constraints.maxWidth;
+              final cacheWidth = available.isFinite && available > 0
+                  ? (available * devicePixelRatio).round()
+                  : null;
+              return Image.memory(
+                image.bytes,
+                fit: BoxFit.contain,
+                alignment: Alignment.centerLeft,
+                gaplessPlayback: true,
+                cacheWidth: cacheWidth,
+                errorBuilder: (context, error, stackTrace) => Text(
+                  '图片无法显示',
+                  style: TextStyle(color: AppColors.muted, fontSize: 12),
+                ),
+              );
+            },
           ),
         );
         return Semantics(
@@ -454,7 +471,18 @@ Future<void> _showImage(BuildContext context, Uint8List bytes) {
               child: InteractiveViewer(
                 minScale: 0.7,
                 maxScale: 5,
-                child: Center(child: Image.memory(bytes, fit: BoxFit.contain)),
+                child: Center(
+                  child: Image.memory(
+                    bytes,
+                    fit: BoxFit.contain,
+                    // 全屏看图是这个 App 里唯一需要高清的场景，按屏幕宽度
+                    // 解码即可（再大也看不见），不必按原图像素。
+                    cacheWidth:
+                        (MediaQuery.sizeOf(context).width *
+                                MediaQuery.devicePixelRatioOf(context))
+                            .round(),
+                  ),
+                ),
               ),
             ),
             Positioned(
