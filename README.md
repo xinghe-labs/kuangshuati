@@ -60,12 +60,6 @@
 
 ---
 
-## 🔗 Friend Links
-
-- 🐧 [**LinuxDO**](https://linux.do)
-
----
-
 以下内容面向开发者。
 
 ## 快速开始
@@ -136,3 +130,9 @@ docs/                 # 题库内容清单格式示例
 ## English
 
 **Kuangshuati** ("Crazy Drills") is an offline-first Flutter app for practicing the aptitude section (行测 / xingce) of China's civil-service exam. No account, no sign-in, no analytics — your answers never leave your device. The full question bank (one-time in-app download, ~145 MB, SHA-256 verified) lives in local SQLite, and everything works fully offline afterwards: six practice modes, error review, mock exams with countdown auto-submit, cross-device backup via `.gkbackup` files. Source is open under Apache-2.0 — grab the Android APK from [Releases](https://github.com/xinghe-labs/kuangshuati/releases); a Web build is supported, and iOS compiles in CI (signed release pending).
+
+---
+
+## 🔗 Friend Links
+
+- 🐧 [**LinuxDO**](https://linux.do)
