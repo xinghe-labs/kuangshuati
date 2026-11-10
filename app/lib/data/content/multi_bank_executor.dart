@@ -32,8 +32,16 @@ class MultiBankSqlExecutor implements SqlExecutor {
 
   /// 打开并合并所有题库文件。
   ///
-  /// [entries] 为 (bankId, 数据库绝对路径)。任一库打不开或损坏
-  /// （quick_check 不过）都抛 [SqliteException]，由上层决定回退策略。
+  /// 只做**不扫页**的结构探针：ATTACH 之后读 `sqlite_master` 确认四张核心表
+  /// 存在，再各取一行。库被截断/不是 SQLite 文件时这两步会直接抛
+  /// [SqliteException]，由上层决定回退策略。
+  ///
+  /// 这里刻意**不做** `PRAGMA quick_check`：它要扫完整个库，实测 315 MB
+  /// 题库在桌面上要 5.4–17.4 s，而这段跑在首帧之前，等于让用户盯着静态
+  /// 启动图十几秒。完整性在安装（[ContentPackageService] 的 sha256 +
+  /// quick_check）和导入（[ContentImportService]）时已经验过，文件又在
+  /// 应用私有目录里，启动时重复全扫没有收益；文件大小与安装记录不符
+  /// 的情况由 [FullContentRepository.openInstalled] 直接判损坏。
   static Future<MultiBankSqlExecutor> open(
     List<({String bankId, String path})> entries,
   ) async {
@@ -46,15 +54,7 @@ class MultiBankSqlExecutor implements SqlExecutor {
         final alias = 'bank_${entry.bankId}';
         // ATTACH 支持绑定参数，路径里出现引号等特殊字符也安全。
         database.execute('ATTACH DATABASE ? AS $alias', [entry.path]);
-        final integrity = database
-            .select('PRAGMA $alias.quick_check')
-            .first
-            .columnAt(0) as String;
-        if (integrity != 'ok') {
-          throw StateError(
-            'Bank ${entry.bankId} integrity check failed: $integrity',
-          );
-        }
+        _probeSchema(database, alias, entry.bankId);
       }
       for (final table in const ['papers', 'questions', 'assets', 'images']) {
         _createUnionView(database, table, entries);
@@ -67,6 +67,25 @@ class MultiBankSqlExecutor implements SqlExecutor {
       database.close();
       rethrow;
     }
+  }
+
+  /// 核心表必须齐全，且能真正读出一行。
+  ///
+  /// 只碰 `sqlite_master` 与各表首页，成本在毫秒级；损坏的库（截断、
+  /// 页头被写坏、根本不是 SQLite 文件）在这一步就会抛异常。
+  static void _probeSchema(Database database, String alias, String bankId) {
+    const tables = ['papers', 'questions', 'assets', 'images'];
+    for (final table in tables) {
+      final found = database.select(
+        "SELECT 1 FROM $alias.sqlite_master "
+        "WHERE type IN ('table','view') AND name=? LIMIT 1",
+        [table],
+      );
+      if (found.isEmpty) {
+        throw StateError('Bank $bankId is missing table: $table');
+      }
+    }
+    database.select('SELECT 1 FROM $alias.questions LIMIT 1');
   }
 
   /// 建一张合并视图：`SELECT '<bankId>' AS _bank, * FROM bank_<id>.<table>`

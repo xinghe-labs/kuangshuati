@@ -41,11 +41,25 @@ class FullContentRepository implements ContentRepository {
           path: registry.absoluteDatabasePath(bank),
         ),
     ];
-    for (final entry in entries) {
-      if (!File(entry.path).existsSync()) {
+    for (final bank in registry.banks) {
+      final path = registry.absoluteDatabasePath(bank);
+      final file = File(path);
+      if (!file.existsSync()) {
         throw StateError(
-          'Bank database missing: ${entry.bankId} (${entry.path})',
+          'Bank database missing: ${bank.id} ($path)',
         );
+      }
+      // 安装时记下的字节数与磁盘上不符 = 文件被截断或被覆写。
+      // 比 quick_check 便宜几个数量级，而且启动时就该立刻发现。
+      final expected = bank.databaseBytes;
+      if (expected != null && expected > 0) {
+        final actual = file.lengthSync();
+        if (actual != expected) {
+          throw StateError(
+            'Bank ${bank.id} size mismatch: '
+            'expected $expected bytes, found $actual',
+          );
+        }
       }
     }
     final executor = await MultiBankSqlExecutor.open(entries);
