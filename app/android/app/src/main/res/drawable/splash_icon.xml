@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ 启动窗口图标（windowSplashScreenAnimatedIcon）。
+  规范：画布 288x288dp，可见安全区是居中的 192x192 圆。所以徽标本体
+  只占 48..240，四角再收 44 的圆角，确保不会被圆形遮罩切到。
+  字形来自 ic_launcher_foreground.xml，按 115/65 放大并居中。
+  暗色变体见 drawable-night/splash_icon.xml。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="288"
+    android:viewportHeight="288">
+    <path
+        android:fillColor="#111111"
+        android:pathData="M92,48 L196,48 A44,44 0 0 1 240,92 L240,196 A44,44 0 0 1 196,240 L92,240 A44,44 0 0 1 48,196 L48,92 A44,44 0 0 1 92,48 Z" />
+    <group
+        android:scaleX="1.769"
+        android:scaleY="1.769"
+        android:translateX="31.7"
+        android:translateY="44.9">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M31,25 L77,25 L77,37 L31,37 Z M31,48 L68,48 L68,60 L31,60 Z M31,71 L56,71 L56,83 L31,83 Z M70,64 L77,71 L89,56 L96,63 L77,87 L63,73 Z" />
+    </group>
+</vector>
