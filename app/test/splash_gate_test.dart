@@ -5,16 +5,39 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kuangshuati/features/splash/splash_screen.dart';
 
 void main() {
-  testWidgets('先播启动动效，初始化完成后淡入 App', (tester) async {
-    final completer = Completer<Widget>();
+  testWidgets('先播完动效再初始化，然后淡入 App', (tester) async {
+    var bootstrapCalls = 0;
     await tester.pumpWidget(
       SplashGate(
-        bootstrap: () => completer.future,
-        minimumDuration: const Duration(milliseconds: 200),
+        bootstrap: () async {
+          bootstrapCalls++;
+          return const MaterialApp(home: Scaffold(body: Text('真正的 App')));
+        },
       ),
     );
 
-    // 初始化还没完成：停在动效上。
+    expect(find.byType(SplashScreen), findsOneWidget);
+    // 动效还没播完，初始化不应该开始：它会占住 UI 线程把动画卡住。
+    expect(bootstrapCalls, 0);
+
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(bootstrapCalls, 0, reason: '动效播放期间不能开始初始化');
+
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(bootstrapCalls, 1, reason: '动效播完才开始初始化');
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('真正的 App'), findsOneWidget);
+    expect(find.byType(SplashScreen), findsNothing);
+  });
+
+  testWidgets('初始化慢时停在动效上，不会先闪一屏空白', (tester) async {
+    final completer = Completer<Widget>();
+    await tester.pumpWidget(SplashGate(bootstrap: () => completer.future));
+
+    await tester.pump(const Duration(milliseconds: 700));
+    // 动效播完但初始化没结束：仍然停在启动页。
     expect(find.byType(SplashScreen), findsOneWidget);
     expect(find.text('真正的 App'), findsNothing);
 
@@ -22,29 +45,6 @@ void main() {
       const MaterialApp(home: Scaffold(body: Text('真正的 App'))),
     );
     await tester.pump();
-    // 最短展示时长还没到，仍然在动效上。
-    expect(find.text('真正的 App'), findsNothing);
-
-    await tester.pump(const Duration(milliseconds: 250));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('真正的 App'), findsOneWidget);
-    expect(find.byType(SplashScreen), findsNothing);
-  });
-
-  testWidgets('初始化很快时也不会只闪一帧动效', (tester) async {
-    await tester.pumpWidget(
-      SplashGate(
-        bootstrap: () async => const MaterialApp(
-          home: Scaffold(body: Text('真正的 App')),
-        ),
-        minimumDuration: const Duration(milliseconds: 520),
-      ),
-    );
-
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byType(SplashScreen), findsOneWidget);
-
-    await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('真正的 App'), findsOneWidget);
   });
@@ -58,16 +58,16 @@ void main() {
           if (attempts == 1) throw StateError('题库打不开');
           return const MaterialApp(home: Scaffold(body: Text('真正的 App')));
         },
-        minimumDuration: const Duration(milliseconds: 50),
       ),
     );
 
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('应用启动失败'), findsOneWidget);
 
     await tester.tap(find.text('重试'));
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('真正的 App'), findsOneWidget);
     expect(attempts, 2);

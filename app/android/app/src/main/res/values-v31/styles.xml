@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ 的启动窗口由系统 SplashScreen 绘制，它只认纯色背景，
+         读不了 windowBackground 里的 layer-list（MIUI 上实测会画成纯黑）。
+         这里显式给底色，并指定居中图标，接上 Flutter 侧的启动动效。 -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@color/launch_background_color</item>
+        <item name="android:windowSplashScreenBackground">@color/launch_background_color</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/launch_image</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+</resources>
