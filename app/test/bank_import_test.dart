@@ -7,14 +7,30 @@ import 'package:kuangshuati/features/content/content_import_service.dart';
 /// 实跑 App 侧 bank 校验器（parseBankJson，与本地导入同一解析路径），
 /// 对数据侧交付的全部 bank JSON 做导入级验证。
 void main() {
-  final banksDir = Directory(
-    '<local-path>',
-  );
+  final banksDir = _configuredBanksDir();
+  if (banksDir == null) {
+    test('bank 导入校验（需要 KSQ_BANKS_DIR）', () {
+      markTestSkipped('未设置 KSQ_BANKS_DIR，跳过数据侧导入校验');
+    });
+  } else {
+    _checkDeliveredBanks(banksDir);
+  }
 
-  test('banks 目录存在', () {
-    expect(banksDir.existsSync(), isTrue, reason: banksDir.path);
-  });
+  _v2FormatTests();
+}
 
+/// 数据侧交付的 bank JSON 是私有数据，不在仓库里，所以目录由环境变量指路：
+///   KSQ_BANKS_DIR=/path/to/banks flutter test test/bank_import_test.dart
+/// 没设或目录不存在时整组跳过——公开仓的 CI 就是这种情况。
+/// （这里曾经硬编码过一个本机绝对路径，导致在 Linux CI 上整个文件加载失败。）
+Directory? _configuredBanksDir() {
+  final configured = Platform.environment['KSQ_BANKS_DIR'];
+  if (configured == null || configured.isEmpty) return null;
+  final dir = Directory(configured);
+  return dir.existsSync() ? dir : null;
+}
+
+void _checkDeliveredBanks(Directory banksDir) {
   final bankFiles = banksDir
       .listSync()
       .whereType<File>()
@@ -59,7 +75,10 @@ void main() {
       expect(questionCount, greaterThan(0));
     }, timeout: const Timeout(Duration(minutes: 3)));
   }
+}
 
+/// 格式校验不依赖外部数据，任何环境都跑。
+void _v2FormatTests() {
   test('v2 自评题：双省略合法', () {
     final v2Bank = '{"format":"kuangshuati-bank","formatVersion":2,'
         '"name":"自评题测试","contentVersion":"1.0.0+1","images":{},'
