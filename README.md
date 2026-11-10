@@ -24,7 +24,7 @@
 
 ## 下载安装
 
-不想编译源码？直接从 [Releases](https://github.com/xinghe-labs/kuangshuati/releases) 下载最新 APK（当前 v1.0.8）。首次启动在应用内下载题库（约 145 MB，SHA-256 校验后安装），之后全程离线。
+不想编译源码？直接从 [Releases](https://github.com/xinghe-labs/kuangshuati/releases) 下载最新 APK（当前 v1.1.1）。首次启动在应用内下载题库（约 145 MB，SHA-256 校验后安装），之后全程离线。
 
 ### 在线试用（不用装）
 
@@ -54,7 +54,7 @@
 
 ## Roadmap
 
-- [x] Android 正式发布（v1.0.8）
+- [x] Android 正式发布（v1.1.1）
 - [x] Web 构建支持，在线试用版已部署到 GitHub Pages
 - [ ] iOS 支持：代码同构，CI 已做编译验证；缺签名证书，上架时间待定
 - [ ] 题库内容更新：应用内已支持版本检查，公开的更新节奏待定
