@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 暗色纸底上的启动图标：徽标反白、字形取墨色。几何尺寸同 drawable/splash_icon.xml。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="288"
+    android:viewportHeight="288">
+    <path
+        android:fillColor="#E6E5DE"
+        android:pathData="M92,48 L196,48 A44,44 0 0 1 240,92 L240,196 A44,44 0 0 1 196,240 L92,240 A44,44 0 0 1 48,196 L48,92 A44,44 0 0 1 92,48 Z" />
+    <group
+        android:scaleX="1.769"
+        android:scaleY="1.769"
+        android:translateX="31.7"
+        android:translateY="44.9">
+        <path
+            android:fillColor="#171715"
+            android:pathData="M31,25 L77,25 L77,37 L31,37 Z M31,48 L68,48 L68,60 L31,60 Z M31,71 L56,71 L56,83 L31,83 Z M70,64 L77,71 L89,56 L96,63 L77,87 L63,73 Z" />
+    </group>
+</vector>
