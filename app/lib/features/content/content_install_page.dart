@@ -90,16 +90,41 @@ class _ContentInstallPageState extends ConsumerState<ContentInstallPage> {
                   ),
                   if (downloading || checking) ...[
                     const SizedBox(height: 24),
-                    LinearProgressIndicator(
-                      value: downloading ? manager.progress : null,
-                      minHeight: 6,
+                    // 阶段文字与百分比同行：百分比用等宽数字，跳动时不会左右抳。
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            manager.stage,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                        if (downloading) ...[
+                          const SizedBox(width: 12),
+                          Text(
+                            '${(manager.progress * 100).toStringAsFixed(0)}%',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                          ),
+                        ],
+                      ],
                     ),
-                    const SizedBox(height: 10),
-                    Text(
-                      downloading
-                          ? '${manager.stage} ${(manager.progress * 100).toStringAsFixed(0)}%'
-                          : manager.stage,
-                      style: Theme.of(context).textTheme.bodySmall,
+                    const SizedBox(height: 12),
+                    // 与统计页的进度条同一种写法（softFill 轨道 + ink 填充），
+                    // 只是这条是页面主进度，所以粗一点。
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: downloading ? manager.progress : null,
+                        minHeight: 8,
+                        backgroundColor: AppColors.softFill,
+                        valueColor: AlwaysStoppedAnimation(AppColors.ink),
+                      ),
                     ),
                   ],
                   if (manager.errorMessage != null) ...[

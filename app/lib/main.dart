@@ -9,6 +9,7 @@ import 'core/providers.dart';
 import 'data/database/app_database.dart';
 import 'features/content/content_manager.dart';
 import 'features/content/content_manager_base.dart';
+import 'features/splash/splash_screen.dart';
 
 /// 原生端入口（Android / iOS / 桌面）。
 ///
@@ -16,7 +17,19 @@ import 'features/content/content_manager_base.dart';
 /// 之后完全离线可用。
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(await buildKuangshuatiApp());
+  // 首帧只挂启动动效，题库初始化放到首帧之后跑：初始化实测约 10 ms，
+  // 但它在 runApp 之前就会把原生启动图卡成一段静态等待。
+  runApp(const AppBootstrap());
+}
+
+/// 启动闸门：先播动效，再淡入 [buildKuangshuatiApp] 构建的 App。
+class AppBootstrap extends StatelessWidget {
+  const AppBootstrap({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SplashGate(bootstrap: buildKuangshuatiApp);
+  }
 }
 
 Future<ProviderScope> buildKuangshuatiApp({

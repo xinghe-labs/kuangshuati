@@ -91,7 +91,7 @@ flutter:
     # 全量题库不再内置 APK：首次启动后从 R2 下载安装（见 lib/features/content）。
     # app/assets/content/ 仍作为 tools/build_content_package.py 的构建源保留，
     # 但不声明为 Flutter asset，避免 298MB 分片被打进安装包。
-    []
+    - assets/branding/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
