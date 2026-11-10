@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -29,11 +30,15 @@ Future<ProviderScope> buildKuangshuatiApp({
   if (manager.phase == ContentManagerPhase.checking) {
     await manager.initialize();
   }
-  final stats = await manager.repository.stats();
-  debugPrint(
-    'Content ${stats.contentVersion}: '
-    '${stats.questionCount} questions, ${stats.paperCount} papers',
-  );
+  // stats() 要 COUNT 三张大表（实测 ~30 ms，手机上更久），而这里只为了打一行
+  // 调试日志。发布构建不跑它，首帧前就只剩 ATTACH + 结构探针。
+  if (kDebugMode) {
+    final stats = await manager.repository.stats();
+    debugPrint(
+      'Content ${stats.contentVersion}: '
+      '${stats.questionCount} questions, ${stats.paperCount} papers',
+    );
+  }
   return ProviderScope(
     overrides: [
       contentManagerProvider.overrideWith((ref) {
