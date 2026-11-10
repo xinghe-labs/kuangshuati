@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Android 12+ 的启动窗口由系统 SplashScreen 绘制，它只认纯色背景，
-         读不了 windowBackground 里的 layer-list（MIUI 上实测会画成纯黑）。
-         这里显式给底色，并指定居中图标，接上 Flutter 侧的启动动效。 -->
+    <!-- Android 12+ 的启动窗口由系统 SplashScreen 绘制，背景必须显式给纯色：
+         不给它会去解析 windowBackground 里的 layer-list 取色，解析失败在 MIUI
+         上画成纯黑（StartingSurfaceDrawer: Resources$NotFoundException）。
+
+         windowBackground 也保持纯色：试过换成带图标的 layer-list 想填上
+         引擎冷启动那段空白（约 0.9 秒），实测 MIUI 只画颜色、不画位图，
+         windowSplashScreenAnimatedIcon 同样不渲染。所以那段时间只能是纸色，
+         由 Flutter 启动页的图标淡入接上。 -->
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">@color/launch_background_color</item>
         <item name="android:windowSplashScreenBackground">@color/launch_background_color</item>
