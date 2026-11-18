@@ -26,7 +26,13 @@ const _kInlineDesignFontSize = 15.0;
 /// 题图富文本：分段落渲染；行内小图与文字同基线混排，
 /// 连续块级图用 Wrap 并排；所有图保留点击放大。
 class RichContent extends ConsumerStatefulWidget {
-  const RichContent(this.markup, {this.style, this.selectable = true, super.key});
+  const RichContent(
+    this.markup, {
+    this.style,
+    this.selectable = true,
+    this.heightMap,
+    super.key,
+  });
 
   final String markup;
   final TextStyle? style;
@@ -37,6 +43,16 @@ class RichContent extends ConsumerStatefulWidget {
   /// 所以放进「整块可点」区域的文字（选项）必须关掉，
   /// 否则用户点选项文字没有任何反应。
   final bool selectable;
+
+  /// 调用方预查好的 assetId → 原始像素高度。
+  ///
+  /// 不传时本组件会异步去题库查，查到后重建——于是内容先按块级占位画（160×72），
+  /// 再改判行内公式（28px），每张图让内容矮约 50px。用户停在底部时
+  /// `ListView` 会把位置 clamp 到变短的 `maxScrollExtent`，表现为
+  /// 「向上滑被弹回底部」；解析越长、公式图越多，拽回的距离越大。
+  /// 传入后首帧就是最终排版，压根不会有这次重排；而且高度由调用方持有，
+  /// 列表回收后重新挂载也不会再查一次、再收缩一次。
+  final Map<String, int>? heightMap;
 
   @override
   ConsumerState<RichContent> createState() => _RichContentState();
@@ -60,10 +76,17 @@ class _RichContentState extends ConsumerState<RichContent> {
   @override
   void didUpdateWidget(covariant RichContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.markup != widget.markup) _ensureHeights();
+    if (oldWidget.markup != widget.markup ||
+        oldWidget.heightMap != widget.heightMap) {
+      _requestedMarkup = null;
+      _ensureHeights();
+    }
   }
 
   void _ensureHeights() {
+    // 调用方已经预查到高度：首帧即终态，不必也不能再异步查一遍，
+    // 否则会白白多一次块级占位 → 行内的重排。
+    if (widget.heightMap != null) return;
     final markup = widget.markup;
     if (_requestedMarkup == markup) return;
     _requestedMarkup = markup;
@@ -95,7 +118,7 @@ class _RichContentState extends ConsumerState<RichContent> {
         widget.style ??
         TextStyle(color: AppColors.ink, fontSize: 15, height: 1.65);
     final segments = _parseSegments(markup);
-    final heights = _heights;
+    final heights = widget.heightMap ?? _heights;
     // 行内判定：阈值内，或夹在句中（前后同一行都有文字）且高度不超句中上限。
     final inlineFlags = _resolveInlineFlags(segments, heights);
 
@@ -509,6 +532,16 @@ class _Segment {
   final String? assetId;
   final int? height;
 }
+
+/// 抽取一段 markup 里所有图片的 assetId。
+///
+/// 供调用方提前调 [ContentRepository.imageHeights] 预查高度，再通过
+/// `RichContent.heightMap` 传回来，让首帧就是最终排版（行内/块级已定），
+/// 避免「先按块级占位画 → 查到高度改行内」的收缩把滚动位置拽回去。
+List<String> richContentAssetIds(String markup) => _parseSegments(markup)
+    .where((segment) => segment.assetId != null)
+    .map((segment) => segment.assetId!)
+    .toList(growable: false);
 
 List<_Segment> _parseSegments(String input) {
   final segments = <_Segment>[];
