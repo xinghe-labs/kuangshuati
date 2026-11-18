@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/keep_screen_on.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../data/content/content_repository.dart' show AssetSize;
 import '../../data/database/app_database.dart' as db;
 import '../../data/database/session_answer_extensions.dart';
 import '../../domain/models.dart' as domain;
@@ -30,9 +31,9 @@ class _PracticePageState extends ConsumerState<PracticePage>
   final Map<String, int> _questionBaseDurations = {};
   final Map<String, domain.QuestionContent> _questions = {};
   final Set<String> _uncertain = {};
-  // 题目 id → 该题所有图的高度。提前查好并传给 RichContent，
+  // 题目 id → 该题所有图的原始尺寸。提前查好并传给 RichContent，
   // 让首帧就是最终排版，不再出现「块级占位 → 行内公式」的收缩。
-  final Map<String, Map<String, int>> _heightMaps = {};
+  final Map<String, Map<String, AssetSize>> _imageSizes = {};
   final ScrollController _scrollController = ScrollController();
 
   db.PracticeSession? _session;
@@ -388,13 +389,13 @@ class _PracticePageState extends ConsumerState<PracticePage>
                     ),
                     child: RichContent(
                       question.material!,
-                      heightMap: _heightMaps[question.id],
+                      imageSizes: _imageSizes[question.id],
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
                 RichContent(
                   question.stem,
-                  heightMap: _heightMaps[question.id],
+                  imageSizes: _imageSizes[question.id],
                   style: TextStyle(
                     color: AppColors.ink,
                     fontSize: 18,
@@ -416,7 +417,7 @@ class _PracticePageState extends ConsumerState<PracticePage>
                       child: _OptionTile(
                         letter: entry.key,
                         text: entry.value,
-                        heightMap: _heightMaps[question.id],
+                        imageSizes: _imageSizes[question.id],
                         selected:
                             _selected[question.id]?.contains(entry.key) ?? false,
                         showResult: showResult,
@@ -474,7 +475,7 @@ class _PracticePageState extends ConsumerState<PracticePage>
                     correct: answer?.isCorrect == true,
                     correctAnswers: question.correctAnswers,
                     solution: question.solution,
-                    heightMap: _heightMaps[question.id],
+                    imageSizes: _imageSizes[question.id],
                   ),
                 ],
               ],
@@ -524,10 +525,10 @@ class _PracticePageState extends ConsumerState<PracticePage>
   /// 改判行内公式（28px），每张图让内容矮约 50px。用户停在底部时，ListView
   /// 会把位置 clamp 到变短的 maxScrollExtent，表现为「向上滑被弹回底部」；
   /// 解析越长、公式图越多，拽回的距离越大（实测 6 张 ≈ 300px）。
-  Future<Map<String, int>> _queryImageHeights(
+  Future<Map<String, AssetSize>> _queryImageSizes(
     domain.QuestionContent question,
   ) async {
-    final cached = _heightMaps[question.id];
+    final cached = _imageSizes[question.id];
     if (cached != null) return cached;
     final assetIds = <String>{
       ...richContentAssetIds(question.material ?? ''),
@@ -540,7 +541,7 @@ class _PracticePageState extends ConsumerState<PracticePage>
     try {
       return await ref
           .read(contentRepositoryProvider)
-          .imageHeights(assetIds);
+          .imageSizes(assetIds);
     } catch (_) {
       // 查不到就退回两段式排版，只是多一次重排，不影响内容展示。
       return const {};
@@ -576,10 +577,10 @@ class _PracticePageState extends ConsumerState<PracticePage>
       final firstQuestionId = rows.isEmpty ? null : rows[index].questionId;
       final firstQuestion =
           firstQuestionId == null ? null : _questions[firstQuestionId];
-      // 先把首题的图高查好再进首帧，否则解析会在首帧后收缩一次。
-      final firstHeights = firstQuestion == null
+      // 先把首题的图尺寸查好再进首帧，否则解析会在首帧后收缩一次。
+      final firstSizes = firstQuestion == null
           ? null
-          : await _queryImageHeights(firstQuestion);
+          : await _queryImageSizes(firstQuestion);
       final favorite = firstQuestionId == null
           ? false
           : await database.isFavorite(firstQuestionId);
@@ -588,8 +589,8 @@ class _PracticePageState extends ConsumerState<PracticePage>
         _session = session;
         _rows = rows;
         _index = index;
-        if (firstQuestion != null && firstHeights != null) {
-          _heightMaps[firstQuestion.id] = firstHeights;
+        if (firstQuestion != null && firstSizes != null) {
+          _imageSizes[firstQuestion.id] = firstSizes;
         }
         _baseDurationMs = session.durationMs;
         _runStartedAt = DateTime.now();
@@ -791,16 +792,16 @@ class _PracticePageState extends ConsumerState<PracticePage>
       isCorrect: current?.isCorrect,
     );
     final totalDuration = _elapsedSessionMs;
-    // 切题前先查好目标题的图高，让新题首帧就是最终排版。
+    // 切题前先查好目标题的图尺寸，让新题首帧就是最终排版。
     final target = _questions[_rows[index].questionId];
-    final targetHeights = target == null
+    final targetSizes = target == null
         ? null
-        : await _queryImageHeights(target);
+        : await _queryImageSizes(target);
     if (!mounted) return;
     setState(() {
       _index = index;
-      if (target != null && targetHeights != null) {
-        _heightMaps[target.id] = targetHeights;
+      if (target != null && targetSizes != null) {
+        _imageSizes[target.id] = targetSizes;
       }
       _questionStartedAt = DateTime.now();
       _baseDurationMs = totalDuration;
@@ -1233,7 +1234,7 @@ class _OptionTile extends StatelessWidget {
     required this.showResult,
     required this.correct,
     required this.onTap,
-    this.heightMap,
+    this.imageSizes,
   });
 
   final String letter;
@@ -1243,8 +1244,8 @@ class _OptionTile extends StatelessWidget {
   final bool correct;
   final VoidCallback onTap;
 
-  /// 预查好的图高，让首帧就是最终排版（否则选项里的公式图会先撑成块级占位再收缩）。
-  final Map<String, int>? heightMap;
+  /// 预查好的图尺寸，让首帧就是最终排版（否则选项里的公式图会先撑成块级占位再收缩）。
+  final Map<String, AssetSize>? imageSizes;
 
   /// 选项正文是否只是重复了字母（题库里图形/漫画类题的通病）。
   ///
@@ -1342,7 +1343,7 @@ class _OptionTile extends StatelessWidget {
                       : RichContent(
                           text,
                           selectable: false,
-                          heightMap: heightMap,
+                          imageSizes: imageSizes,
                           style: TextStyle(
                             color: AppColors.ink,
                             fontSize: 15,
@@ -1434,15 +1435,15 @@ class _AnswerPanel extends StatelessWidget {
     required this.correct,
     required this.correctAnswers,
     required this.solution,
-    this.heightMap,
+    this.imageSizes,
   });
 
   final bool correct;
   final Set<String> correctAnswers;
   final String solution;
 
-  /// 预查好的图高。解析往往是最长的一段，不传就会在用户停到底部时收缩、把视图拽回。
-  final Map<String, int>? heightMap;
+  /// 预查好的图尺寸。解析往往是最长的一段，不传就会在用户停到底部时收缩、把视图拽回。
+  final Map<String, AssetSize>? imageSizes;
 
   @override
   Widget build(BuildContext context) {
@@ -1484,7 +1485,7 @@ class _AnswerPanel extends StatelessWidget {
           const SizedBox(height: 5),
           RichContent(
             solution,
-            heightMap: heightMap,
+            imageSizes: imageSizes,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         ],

@@ -377,33 +377,35 @@ class SqlContentRepository implements ContentRepository {
   }
 
   /// assetId → 原始高度，命中后永不再查。
-  final Map<String, int> _heightCache = {};
+  /// assetId → 原始尺寸，命中后永不再查。
+  final Map<String, AssetSize> _sizeCache = {};
 
   @override
-  Future<Map<String, int>> imageHeights(Iterable<String> assetIds) async {
+  Future<Map<String, AssetSize>> imageSizes(Iterable<String> assetIds) async {
     final requested = assetIds.toSet();
     final missing = requested
-        .where((id) => !_heightCache.containsKey(id))
+        .where((id) => !_sizeCache.containsKey(id))
         .toList();
     if (missing.isNotEmpty) {
       final placeholders = List.filled(missing.length, '?').join(',');
       for (final row in await _executor.select(
-        'SELECT asset_id, height FROM assets '
+        'SELECT asset_id, width, height FROM assets '
         'WHERE available = 1 AND asset_id IN ($placeholders)',
         missing,
       )) {
+        final width = row['width'];
         final height = row['height'];
-        if (height is int && height > 0) {
-          _heightCache[row['asset_id'] as String] = height;
+        if (width is int && height is int && width > 0 && height > 0) {
+          _sizeCache[row['asset_id'] as String] = AssetSize(width, height);
         }
       }
       for (final id in missing) {
-        _heightCache.putIfAbsent(id, () => 0);
+        _sizeCache.putIfAbsent(id, () => const AssetSize(0, 0));
       }
     }
     return {
       for (final id in requested)
-        if ((_heightCache[id] ?? 0) > 0) id: _heightCache[id]!,
+        if (!_sizeCache[id]!.isEmpty) id: _sizeCache[id]!,
     };
   }
 

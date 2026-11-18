@@ -86,11 +86,30 @@ abstract class ContentRepository {
   /// 取图并带原始尺寸；行内公式图需要按高度决定行内/块级渲染。
   FutureOr<ContentImage?> imageWithSize(String assetId) => null;
 
-  /// 取这批图的原始高度（构建阶段决定行内/块级）。
+  /// 取这批图的原始尺寸（像素）。
+  ///
+  /// 为什么需要宽度：块级题图最终按「可用宽度 × 原始宽高比」渲染，高度封顶
+  /// 380。只知道高度算不出它最终占多高，于是首帧只能先放 160×72 的转圈占位，
+  /// 图加载完成后再重排一次——用户停在解析底部时，这一下重排会把滚动位置
+  /// 顶走（和行内公式图是同一类问题）。
   /// 只查当前 markup 里出现的少量 assetId，走主键索引，开销可忽略。
   /// 声明为异步是因为 Web 端（drift WASM）只有异步查询接口。
-  Future<Map<String, int>> imageHeights(Iterable<String> assetIds) async =>
+  Future<Map<String, AssetSize>> imageSizes(Iterable<String> assetIds) async =>
       const {};
 
   Future<void> close();
+}
+
+/// 一张图的原始像素尺寸（不含字节）。
+class AssetSize {
+  const AssetSize(this.width, this.height);
+
+  final int width;
+  final int height;
+
+  /// 尺寸未知，或题库标记为不可用（`assets.available = 0` 记为 0）。
+  bool get isEmpty => width <= 0 || height <= 0;
+
+  @override
+  String toString() => 'AssetSize(${width}x$height)';
 }

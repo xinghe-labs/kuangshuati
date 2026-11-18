@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/content/content_repository.dart' as repo;
+import '../../data/content/content_repository.dart' show AssetSize;
 
 /// 行内/块级分流阈值（逻辑像素）。
 /// - 图高 ≤ [_kInlineImageMaxHeight]：行内，与文字同基线混排，按字号缩放。
@@ -20,6 +21,9 @@ const _kInlineImageMaxHeight = 40.0;
 const _kInlineImageContextMaxHeight = 72.0;
 const _kBlockImageMaxHeight = 200.0;
 
+/// 块级题图渲染高度上限：再高就等比缩到这个高度，避免一屏只放得下一张图。
+const _kBlockImageMaxRenderHeight = 380.0;
+
 /// 行内图缩放基准：公式图设计高度 28px 对应 fontSize 15。
 const _kInlineDesignFontSize = 15.0;
 
@@ -30,7 +34,7 @@ class RichContent extends ConsumerStatefulWidget {
     this.markup, {
     this.style,
     this.selectable = true,
-    this.heightMap,
+    this.imageSizes,
     super.key,
   });
 
@@ -44,15 +48,18 @@ class RichContent extends ConsumerStatefulWidget {
   /// 否则用户点选项文字没有任何反应。
   final bool selectable;
 
-  /// 调用方预查好的 assetId → 原始像素高度。
+  /// 调用方预查好的 assetId → 原始尺寸。
   ///
   /// 不传时本组件会异步去题库查，查到后重建——于是内容先按块级占位画（160×72），
   /// 再改判行内公式（28px），每张图让内容矮约 50px。用户停在底部时
   /// `ListView` 会把位置 clamp 到变短的 `maxScrollExtent`，表现为
   /// 「向上滑被弹回底部」；解析越长、公式图越多，拽回的距离越大。
-  /// 传入后首帧就是最终排版，压根不会有这次重排；而且高度由调用方持有，
+  /// 传入后首帧就是最终排版，压根不会有这次重排；而且尺寸由调用方持有，
   /// 列表回收后重新挂载也不会再查一次、再收缩一次。
-  final Map<String, int>? heightMap;
+  ///
+  /// 带宽度是因为块级题图最终按「可用宽度 × 原始宽高比」渲染，
+  /// 只知道高度算不出它占多高，占位就会和图加载完成后差一截。
+  final Map<String, AssetSize>? imageSizes;
 
   @override
   ConsumerState<RichContent> createState() => _RichContentState();
@@ -64,29 +71,29 @@ class _RichContentState extends ConsumerState<RichContent> {
   /// 高度来自题库的资产索引，只影响「行内还是块级」的判定，属于排版优化：
   /// 首帧先用 markup 里声明的 height 画出来，查到了再重建。
   /// 这样避免为了一个排版细节把整个内容区卡在加载态。
-  Map<String, int> _heights = const {};
+  Map<String, AssetSize> _sizes = const {};
   String? _requestedMarkup;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _ensureHeights();
+    _ensureSizes();
   }
 
   @override
   void didUpdateWidget(covariant RichContent oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.markup != widget.markup ||
-        oldWidget.heightMap != widget.heightMap) {
+        oldWidget.imageSizes != widget.imageSizes) {
       _requestedMarkup = null;
-      _ensureHeights();
+      _ensureSizes();
     }
   }
 
-  void _ensureHeights() {
-    // 调用方已经预查到高度：首帧即终态，不必也不能再异步查一遍，
+  void _ensureSizes() {
+    // 调用方已经预查到尺寸：首帧即终态，不必也不能再异步查一遍，
     // 否则会白白多一次块级占位 → 行内的重排。
-    if (widget.heightMap != null) return;
+    if (widget.imageSizes != null) return;
     final markup = widget.markup;
     if (_requestedMarkup == markup) return;
     _requestedMarkup = markup;
@@ -95,16 +102,16 @@ class _RichContentState extends ConsumerState<RichContent> {
         .map((segment) => segment.assetId!)
         .toList(growable: false);
     if (assetIds.isEmpty) {
-      if (_heights.isNotEmpty) setState(() => _heights = const {});
+      if (_sizes.isNotEmpty) setState(() => _sizes = const {});
       return;
     }
     ref
         .read(contentRepositoryProvider)
-        .imageHeights(assetIds)
-        .then((heights) {
+        .imageSizes(assetIds)
+        .then((sizes) {
           if (!mounted || _requestedMarkup != markup) return;
-          if (heights.isEmpty) return;
-          setState(() => _heights = heights);
+          if (sizes.isEmpty) return;
+          setState(() => _sizes = sizes);
         })
         .catchError((Object _) {
           // 查不到高度就沿用 markup 声明值，不影响内容展示。
@@ -118,7 +125,11 @@ class _RichContentState extends ConsumerState<RichContent> {
         widget.style ??
         TextStyle(color: AppColors.ink, fontSize: 15, height: 1.65);
     final segments = _parseSegments(markup);
-    final heights = widget.heightMap ?? _heights;
+    final sizes = widget.imageSizes ?? _sizes;
+    // 行内/块级分流只看高度，与宽度无关。
+    final heights = <String, int>{
+      for (final entry in sizes.entries) entry.key: entry.value.height,
+    };
     // 行内判定：阈值内，或夹在句中（前后同一行都有文字）且高度不超句中上限。
     final inlineFlags = _resolveInlineFlags(segments, heights);
 
@@ -177,7 +188,10 @@ class _RichContentState extends ConsumerState<RichContent> {
           runSpacing: 6,
           children: [
             for (final image in blockImages)
-              _BlockAssetImage(assetId: image.assetId!),
+              _BlockAssetImage(
+                assetId: image.assetId!,
+                size: sizes[image.assetId] ?? const AssetSize(0, 0),
+              ),
           ],
         ),
       );
@@ -217,6 +231,7 @@ class _RichContentState extends ConsumerState<RichContent> {
             child: _InlineAssetImage(
               assetId: segment.assetId!,
               targetHeight: inlineHeight,
+              size: sizes[segment.assetId!],
             ),
           ),
         );
@@ -285,10 +300,22 @@ List<bool> _resolveInlineFlags(
 
 /// 行内小图：无灰底、按目标高度等比缩放，点击放大。
 class _InlineAssetImage extends ConsumerStatefulWidget {
-  const _InlineAssetImage({required this.assetId, required this.targetHeight});
+  const _InlineAssetImage({
+    required this.assetId,
+    required this.targetHeight,
+    this.size,
+  });
 
   final String assetId;
   final double targetHeight;
+
+  /// 原始像素尺寸；调用方预查到就有，缺省时占位只能按经验宽高比估。
+  ///
+  /// 行内图最终宽度是 `targetHeight × 原始宽高比`，而题库里公式图的宽高比
+  /// 跨度极大（实测 0.17–34.8，中位数 3.76）。占位若按固定 1.4 猜，
+  /// 换成真图时会改变换行位置，整段高度跟着变——用户停在解析底部时，
+  /// 这一下重排照样会被 clamp 拽回去。知道宽高比就用真图的盒子。
+  final AssetSize? size;
 
   @override
   ConsumerState<_InlineAssetImage> createState() => _InlineAssetImageState();
@@ -328,9 +355,14 @@ class _InlineAssetImageState extends ConsumerState<_InlineAssetImage> {
         final image = snapshot.data;
         if (image == null || image.bytes.isEmpty) {
           // 行内占位：等高空白，缺失提示交给块级视图，不打断文字流。
+          // 宽度要么取自预查到的原始宽高比，要么退回经验值 1.4：
+          // 宽度变，换行位置就变，整段高度跟着变。
           return SizedBox(
             height: widget.targetHeight,
-            width: widget.targetHeight * 1.4,
+            width: _inlinePlaceholderWidth(
+              widget.targetHeight,
+              widget.size,
+            ),
           );
         }
         final ratio = image.width / image.height;
@@ -372,9 +404,12 @@ class _InlineAssetImageState extends ConsumerState<_InlineAssetImage> {
 /// 块级图：无灰底全宽灰条，未知尺寸先按块级展示；>200px 居中，
 /// 最大高度 380；点击放大。
 class _BlockAssetImage extends ConsumerStatefulWidget {
-  const _BlockAssetImage({required this.assetId});
+  const _BlockAssetImage({required this.assetId, required this.size});
 
   final String assetId;
+
+  /// 原始像素尺寸；题库里没记录时是 [AssetSize.isEmpty] 的空尺寸。
+  final AssetSize size;
 
   @override
   ConsumerState<_BlockAssetImage> createState() => _BlockAssetImageState();
@@ -408,74 +443,148 @@ class _BlockAssetImageState extends ConsumerState<_BlockAssetImage> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<repo.ContentImage?>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return SizedBox(
-            width: 160,
-            height: 72,
-            child: Center(
-              child: SizedBox.square(
-                dimension: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-          );
-        }
-        final image = snapshot.data;
-        if (image == null || image.bytes.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            color: AppColors.softFill,
-            child: Text(
-              '图片缺失',
-              style: TextStyle(color: AppColors.muted, fontSize: 12),
-            ),
-          );
-        }
-        final isLarge = image.height > _kBlockImageMaxHeight;
-        final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
-        final imageWidget = ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 380),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              // 题图源图实测最宽 3000+ 像素，而列表里最宽也就屏幕宽度。
-              // 按可用宽度解码，避免每张图都占几十 MB 的解码内存。
-              final available = constraints.maxWidth;
-              final cacheWidth = available.isFinite && available > 0
-                  ? (available * devicePixelRatio).round()
-                  : null;
-              return Image.memory(
-                image.bytes,
-                fit: BoxFit.contain,
-                alignment: Alignment.centerLeft,
-                gaplessPlayback: true,
-                cacheWidth: cacheWidth,
-                errorBuilder: (context, error, stackTrace) => Text(
-                  '图片无法显示',
-                  style: TextStyle(color: AppColors.muted, fontSize: 12),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = constraints.maxWidth;
+        // 首帧就按题库里的原始尺寸把「最终盒子」算出来，占位与真图共用它：
+        // 图片加载完成后高度不变，下方内容不会被顶走（用户停在底部时尤其明显）。
+        final placeholderBox = _blockImageBox(available, widget.size);
+        // 上下各 4px 内边距放在 FutureBuilder 外面：占位和真图都得算上它，
+        // 否则光这一层就能造成 8px 的高度变化（测试里实测到过）。
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: FutureBuilder<repo.ContentImage?>(
+            future: _future,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                // 尺寸未知时只能退回固定占位：题库里没有这条资产的记录，
+                // 属于少数缺失情况，加载完成后仍会有一次高度变化。
+                if (placeholderBox == null) {
+                  return SizedBox(
+                    width: 160,
+                    height: 72,
+                    child: Center(
+                      child: SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  );
+                }
+                return SizedBox(
+                  width: placeholderBox.width,
+                  height: placeholderBox.height,
+                  child: Center(
+                    child: SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                );
+              }
+              final image = snapshot.data;
+              if (image == null || image.bytes.isEmpty) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  color: AppColors.softFill,
+                  child: Text(
+                    '图片缺失',
+                    style: TextStyle(color: AppColors.muted, fontSize: 12),
+                  ),
+                );
+              }
+              // 真图：优先用题库里的原始尺寸，缺失时用解码出来的尺寸兜底。
+              final natural = widget.size.isEmpty
+                  ? AssetSize(image.width, image.height)
+                  : widget.size;
+              final box = _blockImageBox(available, natural);
+              final isLarge = natural.height > _kBlockImageMaxHeight;
+              final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+              final Widget imageWidget;
+              if (box == null) {
+                imageWidget = Image.memory(
+                  image.bytes,
+                  fit: BoxFit.contain,
+                  alignment: Alignment.centerLeft,
+                  gaplessPlayback: true,
+                  errorBuilder: _blockImageError,
+                );
+              } else {
+                imageWidget = SizedBox(
+                  width: box.width,
+                  height: box.height,
+                  child: Image.memory(
+                    image.bytes,
+                    fit: BoxFit.contain,
+                    alignment: Alignment.centerLeft,
+                    gaplessPlayback: true,
+                    // 题图源图实测最宽 3000+ 像素，而列表里最宽也就屏幕宽度。
+                    // 按显示宽度解码，避免每张图都占几十 MB 的解码内存。
+                    cacheWidth: (box.width * devicePixelRatio).round(),
+                    errorBuilder: _blockImageError,
+                  ),
+                );
+              }
+              return Semantics(
+                button: true,
+                label: '查看题图',
+                child: GestureDetector(
+                  onTap: () => _showImage(context, image.bytes),
+                  child: isLarge
+                      ? Center(child: imageWidget)
+                      : Align(
+                          alignment: Alignment.centerLeft,
+                          child: imageWidget,
+                        ),
                 ),
               );
             },
           ),
         );
-        return Semantics(
-          button: true,
-          label: '查看题图',
-          child: GestureDetector(
-            onTap: () => _showImage(context, image.bytes),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: isLarge
-                  ? Center(child: imageWidget)
-                  : Align(alignment: Alignment.centerLeft, child: imageWidget),
-            ),
-          ),
-        );
       },
     );
   }
+}
+
+/// 行内图占位的宽度。
+///
+/// 真图宽度 = `targetHeight × (原始宽 / 原始高)`；占位知道原始宽高时
+/// 就用同一个值，换图前后盒子完全一致，不会改变换行、不会改变段落高度。
+/// 尺寸缺失时退回经验宽高比 1.4——公式图常见于接近方形的单字符下标，
+/// 但这只是少数（库里 94% 的行内图宽高比偏离 1.4 超过 0.3）。
+double _inlinePlaceholderWidth(double targetHeight, AssetSize? size) {
+  if (size == null || size.isEmpty) return targetHeight * 1.4;
+  return targetHeight * size.width / size.height;
+}
+
+Widget _blockImageError(
+  BuildContext context,
+  Object error,
+  StackTrace? stackTrace,
+) => Text(
+  '图片无法显示',
+  style: TextStyle(color: AppColors.muted, fontSize: 12),
+);
+
+/// 块级题图的最终渲染尺寸；尺寸未知时返回 null。
+///
+/// 等价于原先 `Image.memory(fit: contain)` + `maxHeight: 380` 的实际结果：
+/// 按可用宽度等比缩放（不放大超过原始尺寸），高度超上限再等比缩回。
+/// 抽成函数是为了让「加载中的占位」和「加载完成的真图」共用同一个盒子：
+/// 两者尺寸一致，图加载完成就不会把下方内容顶走。
+Size? _blockImageBox(double available, AssetSize size) {
+  if (size.isEmpty || !available.isFinite || available <= 0) return null;
+  final width = available < size.width ? available : size.width.toDouble();
+  var height = size.height * width / size.width;
+  var scaledWidth = width;
+  if (height > _kBlockImageMaxRenderHeight) {
+    scaledWidth *= _kBlockImageMaxRenderHeight / height;
+    height = _kBlockImageMaxRenderHeight;
+  }
+  return Size(scaledWidth, height);
 }
 
 Future<void> _showImage(BuildContext context, Uint8List bytes) {
@@ -535,8 +644,8 @@ class _Segment {
 
 /// 抽取一段 markup 里所有图片的 assetId。
 ///
-/// 供调用方提前调 [ContentRepository.imageHeights] 预查高度，再通过
-/// `RichContent.heightMap` 传回来，让首帧就是最终排版（行内/块级已定），
+/// 供调用方提前调 [ContentRepository.imageSizes] 预查尺寸，再通过
+/// `RichContent.imageSizes` 传回来，让首帧就是最终排版（行内/块级已定），
 /// 避免「先按块级占位画 → 查到高度改行内」的收缩把滚动位置拽回去。
 List<String> richContentAssetIds(String markup) => _parseSegments(markup)
     .where((segment) => segment.assetId != null)

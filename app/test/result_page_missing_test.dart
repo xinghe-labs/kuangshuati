@@ -23,7 +23,7 @@ class _EmptyContentRepository extends SeedContentRepository {
   Future<ContentImage?> imageWithSize(String assetId) async => null;
 
   @override
-  Future<Map<String, int>> imageHeights(Iterable<String> assetIds) async =>
+  Future<Map<String, AssetSize>> imageSizes(Iterable<String> assetIds) async =>
       const {};
 }
 
@@ -46,7 +46,7 @@ class _PartialContentRepository extends SeedContentRepository {
   Future<ContentImage?> imageWithSize(String assetId) async => null;
 
   @override
-  Future<Map<String, int>> imageHeights(Iterable<String> assetIds) async =>
+  Future<Map<String, AssetSize>> imageSizes(Iterable<String> assetIds) async =>
       const {};
 }
 

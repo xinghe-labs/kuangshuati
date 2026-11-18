@@ -91,24 +91,26 @@ void main() {
         final image = await repository.imageBytes(assetId!);
         expect(image, isNotNull);
         expect(image, isNotEmpty);
-        // 行内/块级分流依赖高度查询：必须能拿到与图片真实高度一致的值。
-        final heights = await repository.imageHeights([assetId]);
+        // 行内/块级分流依赖尺寸查询：必须能拿到与图片真实尺寸一致的值。
+        final sizes = await repository.imageSizes([assetId]);
         expect(
-          heights[assetId],
+          sizes[assetId],
           isNotNull,
-          reason: 'asset height must be indexed',
+          reason: 'asset size must be indexed',
         );
-        expect(heights[assetId], greaterThan(0));
+        expect(sizes[assetId]!.height, greaterThan(0));
+        expect(sizes[assetId]!.width, greaterThan(0));
         expect(
-          await repository.imageHeights(['asset_does_not_exist']),
+          await repository.imageSizes(['asset_does_not_exist']),
           isEmpty,
-          reason: 'unknown asset must not be reported as inline-sized',
+          reason: 'unknown asset must not be reported as sized',
         );
         final codec = await ui.instantiateImageCodec(image!);
         final frame = await codec.getNextFrame();
         expect(frame.image.width, greaterThan(0));
         expect(frame.image.height, greaterThan(0));
-        expect(heights[assetId], frame.image.height);
+        expect(sizes[assetId]!.height, frame.image.height);
+        expect(sizes[assetId]!.width, frame.image.width);
         frame.image.dispose();
         codec.dispose();
 

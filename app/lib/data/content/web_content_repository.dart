@@ -197,8 +197,8 @@ class WebContentRepository implements ContentRepository {
   }
 
   @override
-  Future<Map<String, int>> imageHeights(Iterable<String> assetIds) =>
-      _inner.imageHeights(assetIds);
+  Future<Map<String, AssetSize>> imageSizes(Iterable<String> assetIds) =>
+      _inner.imageSizes(assetIds);
 
   @override
   Future<void> close() async {

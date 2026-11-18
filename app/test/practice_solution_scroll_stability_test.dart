@@ -6,7 +6,7 @@
 // 拽回的距离越大；被回收的 RichContent 重新挂载又会重来一遍，于是看起来没有尽头。
 //
 // 修复：进页面前把整题（材料/题干/选项/解析）的图高一次查好，通过
-// RichContent.heightMap 传下去，首帧就是最终排版；高度还由调用方持有，
+// RichContent.imageSizes 传下去，首帧就是最终排版；尺寸还由调用方持有，
 // 列表回收后重新挂载也不会再查一次、再缩一次。
 //
 // 核心不变量：**解析第一次可见的那一帧，内容高度就必须是最终高度**。
@@ -15,6 +15,9 @@
 //
 // 注意：练习页有每秒 tick 的定时器，`pumpAndSettle` 永远不会停下来，
 // 所以这里用精确的 `pump` 步进。
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,12 +30,30 @@ import 'package:kuangshuati/data/database/app_database.dart';
 import 'package:kuangshuati/domain/models.dart';
 import 'package:kuangshuati/features/practice/practice_page.dart';
 
-/// 记录 `imageHeights` 被调用了几次：一次是页面预查，多出来的就说明
+/// 一张合法的 100×100 PNG。
+///
+/// 之前用 base64 硬编码的 1×1 PNG 在 Flutter 的 codec 里解码失败
+/// （`Codec failed to produce an image`，PIL 能读但 Flutter 不能），
+/// `Image` 于是退化成 `_debugBuildErrorWidget` 的全宽 Stack，
+/// 把「行内图」量成了 1128×30，看起来像排版爆炸——那是测试素材的问题。
+Future<Uint8List> _makePng() async {
+  final recorder = ui.PictureRecorder();
+  Canvas(recorder).drawRect(
+    const Rect.fromLTWH(0, 0, 100, 100),
+    Paint()..color = const Color(0xFF000000),
+  );
+  final image = await recorder.endRecording().toImage(100, 100);
+  final data = await image.toByteData(format: ui.ImageByteFormat.png);
+  return data!.buffer.asUint8List();
+}
+
+/// 记录 `imageSizes` 被调用了几次：一次是页面预查，多出来的就说明
 /// 还有 RichContent 在自己异步查（那正是收缩的来源）。
 class _RecordingContentRepository extends SeedContentRepository {
-  _RecordingContentRepository(this.questions);
+  _RecordingContentRepository(this.questions, this.bytes);
 
   final List<QuestionContent> questions;
+  final Uint8List bytes;
   int heightCalls = 0;
   final List<int> heightsAsked = [];
 
@@ -45,18 +66,31 @@ class _RecordingContentRepository extends SeedContentRepository {
     ];
   }
 
-  @override
-  Future<ContentImage?> imageWithSize(String assetId) async => null;
+  /// 公式图 28px 高、105px 宽（宽高比 3.75，接近题库实测中位数 3.76；
+  /// 用 28×28 的方图会掩盖「占位宽度猜错 → 换行位置变 → 整段高度变」这条路径）。
+  /// 题图 360×180（块级）。
+  static AssetSize _sizeOf(String assetId) => assetId.startsWith('block-')
+      ? const AssetSize(360, 180)
+      : const AssetSize(105, 28);
 
   @override
-  Future<Map<String, int>> imageHeights(Iterable<String> assetIds) async {
+  Future<ContentImage?> imageWithSize(String assetId) async {
+    // 真实字节 + 声明的原始尺寸：块级题图应当正好占满页面算出的盒子。
+    // 注意不要走 imageSizes()，否则会污染「预查次数」的计数。
+    final size = _sizeOf(assetId);
+    return ContentImage(
+      bytes: bytes,
+      width: size.width,
+      height: size.height,
+    );
+  }
+
+  @override
+  Future<Map<String, AssetSize>> imageSizes(Iterable<String> assetIds) async {
     heightCalls++;
     final ids = assetIds.toList();
     heightsAsked.add(ids.length);
-    // 公式图 28px（行内），题图 180px（块级）。
-    return {
-      for (final id in ids) id: id.startsWith('block-') ? 180 : 28,
-    };
+    return {for (final id in ids) id: _sizeOf(id)};
   }
 }
 
@@ -81,9 +115,9 @@ QuestionContent _longSolutionQuestion({
   questionNo: 1,
   sequence: 1,
   module: '数量关系',
-  // 不含块级题图：块级图占位（160x72）要按可用宽度缩放才得到最终高度，
-  // 不属于本次「公式图两段式」修复范围，这里排除掉，断言只测公式图。
-  material: '材料：阅读下面的表格。',
+  // 材料里放一张块级题图：它的占位也必须首帧就占住最终盒子，
+  // 否则图加载完同样会把下方内容顶走。
+  material: '材料：阅读下面的表格。block-1',
   stem: '根据材料，下列结论正确的是 \ue000s-1\ue001 ？',
   options: const {'A': '选项甲', 'B': '选项乙 \ue000o-1\ue001'},
   correctAnswers: const {'A'},
@@ -179,7 +213,8 @@ void main() {
 
   testWidgets('解析第一次可见时高度就是最终高度，停在底部不会被拽回', (tester) async {
     final question = _longSolutionQuestion(id: 'q-long', steps: 40);
-    final repository = _RecordingContentRepository([question]);
+    final bytes = (await tester.runAsync(_makePng))!;
+    final repository = _RecordingContentRepository([question], bytes);
     await tester.runAsync(() => seedSession(question));
 
     await pumpPractice(tester, repository);
@@ -193,9 +228,9 @@ void main() {
     );
 
     await settleAsync(tester);
+    await settleAsync(tester, 800);
     final position = tester.state<ScrollableState>(scrollable).position;
     final settledMax = position.maxScrollExtent;
-
     expect(
       settledMax,
       moreOrLessEquals(maxAtFirstSight, epsilon: 0.5),
@@ -239,7 +274,8 @@ void main() {
 
   testWidgets('解析区被列表回收后重新挂载，首帧仍是最终高度、也不会再查一次', (tester) async {
     final question = _longSolutionQuestion(id: 'q-long', steps: 40);
-    final repository = _RecordingContentRepository([question]);
+    final bytes = (await tester.runAsync(_makePng))!;
+    final repository = _RecordingContentRepository([question], bytes);
     await tester.runAsync(() => seedSession(question));
 
     await pumpPractice(tester, repository);
@@ -258,7 +294,9 @@ void main() {
 
     // 再滑回底部：解析区重新挂载。这一帧的高度必须还是最终高度。
     position.jumpTo(settledMax);
-    await tester.pump();
+    for (var i = 0; i < 5; i++) {
+      await tester.pump();
+    }
     final maxAtRemount = tester.state<ScrollableState>(scrollable).position
         .maxScrollExtent;
 
@@ -266,7 +304,6 @@ void main() {
     final settledAfterRemount = tester.state<ScrollableState>(scrollable)
         .position
         .maxScrollExtent;
-
     expect(
       maxAtRemount,
       moreOrLessEquals(settledAfterRemount, epsilon: 0.5),
