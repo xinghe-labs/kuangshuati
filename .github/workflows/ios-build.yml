@@ -57,7 +57,8 @@ jobs:
         working-directory: app
         run: |
           set -euo pipefail
-          raw=$(grep -m1 '^version:' pubspec.yaml | sed 's/^version:[[:space:]]*//' | tr -d '\r')
+          raw=$(grep -m1 '^version:' pubspec.yaml \
+            | sed 's/^version:[[:space:]]*//' | tr -d '\r')
           name="${raw%%+*}"
           build="${raw##*+}"
           if [ -z "$name" ] || [ -z "$build" ] || [ "$name" = "$build" ]; then
@@ -79,7 +80,9 @@ jobs:
         run: |
           # iOS 的「发现新版本」提示要读这份清单（Android 发版时同步更新）。
           # 清单地址是公开的，不含密钥，所以直接写在构建参数里。
-          flutter build ios --release --no-codesign             --dart-define=UPDATE_MANIFEST_URL=https://kuangshuati.124145.xyz/update-manifest.json
+          manifest=https://kuangshuati.124145.xyz/update-manifest.json
+          flutter build ios --release --no-codesign \
+            --dart-define=UPDATE_MANIFEST_URL=$manifest
 
       - name: Verify the app bundle was produced
         working-directory: app
@@ -106,7 +109,7 @@ jobs:
       - name: Package unsigned ipa
         working-directory: app
         env:
-          FILE_TAG: ${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.build_number }}
+          FILE_TAG: ${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.build_number }}  # yamllint disable-line rule:line-length
         run: |
           set -euo pipefail
           cd build/ios/iphoneos
@@ -125,7 +128,7 @@ jobs:
       - name: Upload unsigned ipa
         uses: actions/upload-artifact@v4
         with:
-          name: ios-unsigned-ipa-${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.build_number }}
+          name: ios-unsigned-ipa-${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.build_number }}  # yamllint disable-line rule:line-length
           path: app/build/ios/iphoneos/kuangshuati-*-unsigned.ipa
           if-no-files-found: error
           # 包内不含题库（题库首次启动时下载），体积小，留 30 天够重装几轮。
@@ -141,13 +144,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
-          IPA_PATH: build/ios/iphoneos/kuangshuati-${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.build_number }}-unsigned.ipa
+          IPA_PATH: build/ios/iphoneos/kuangshuati-${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.build_number }}-unsigned.ipa  # yamllint disable-line rule:line-length
         run: |
           set -euo pipefail
           # release 事件用它的 tag；push 事件按版本号推 v<版本>。
           tag="${RELEASE_TAG:-v${VERSION_NAME}}"
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            echo "::warning::Release $tag 还不存在，跳过上传 ipa（等发版建好 Release 后，本 workflow 会自动补上）"
+            printf '%s%s\n' "::warning::Release $tag 还不存在，跳过上传 ipa" \
+              "（等发版建好 Release 后，本 workflow 会自动补上）"
             exit 0
           fi
           # 同名附件覆盖，重跑不堆重复文件。
@@ -155,7 +159,8 @@ jobs:
           # 变量名紧跟中文全角标点时必需 braces：macOS 的 bash 3.2 会把
           # 「全角冒号」当成变量名的一部分，$tag： 会解析成变量 tag：→ set -u 报错。
           echo "已上传到 Release ${tag}："
-          gh release view "$tag" --json assets --jq '.assets[] | "\(.name)  \(.size) B"'
+          gh release view "$tag" --json assets \
+            --jq '.assets[] | "\(.name)  \(.size) B"'
 
       - name: Upload build log on failure
         if: failure()

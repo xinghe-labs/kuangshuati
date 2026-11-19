@@ -1,0 +1,7 @@
+# YAML 统一 LF 行尾。
+#
+# Windows 上 core.autocrlf=true 会把检出变成 CRLF，而 .yamllint.yaml
+# 继承的 default 规则要求 LF（new-lines: type=unix）。用 eol=lf 钉死，
+# 这样检出、编辑、lint 三边一致，不必为了 lint 反复手改行尾。
+*.yml text eol=lf
+*.yaml text eol=lf
