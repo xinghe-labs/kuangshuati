@@ -126,8 +126,7 @@ class ReminderScheduler {
   }
 }
 
-/// Web 端（见 reminder_scheduler_web.dart）与原生端共用这份默认装配：
-/// `final reminderScheduler = ReminderScheduler();`
+/// 全局单例入口：`final reminderScheduler = ReminderScheduler();`
 final ReminderScheduler reminderScheduler = ReminderScheduler();
 
 /// 调试用：debug 构建里可以打印下一次触发时间，验证调度没排错。
