@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -40,7 +42,10 @@ class SettingsPlatform {
     SettingsPlatformAction(
       icon: Icons.system_update_alt,
       title: '检查更新',
-      subtitle: '启动时自动检查，也支持手动检查',
+      // iOS 不会自动下载安装（只能自己重签 ipa），不要写「启动时自动检查」。
+      subtitle: Platform.isAndroid
+          ? '启动时自动检查，也支持手动检查'
+          : '发现新版本后到 Releases 下载新 ipa',
       onTap: (context, ref) => checkForAppUpdate(context, ref, manual: true),
     ),
   ];

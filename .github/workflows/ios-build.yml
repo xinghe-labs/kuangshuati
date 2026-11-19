@@ -76,7 +76,10 @@ jobs:
       # 构建失败会以非零退出码结束，Swift 编译错误会直接出现在日志里。
       - name: Build iOS (no codesign)
         working-directory: app
-        run: flutter build ios --release --no-codesign
+        run: |
+          # iOS 的「发现新版本」提示要读这份清单（Android 发版时同步更新）。
+          # 清单地址是公开的，不含密钥，所以直接写在构建参数里。
+          flutter build ios --release --no-codesign             --dart-define=UPDATE_MANIFEST_URL=https://kuangshuati.124145.xyz/update-manifest.json
 
       - name: Verify the app bundle was produced
         working-directory: app

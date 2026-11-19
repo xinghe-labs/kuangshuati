@@ -160,4 +160,88 @@ void main() {
       isFalse,
     );
   });
+
+  group('parseAvailableVersion（iOS 只看版本号）', () {
+    test('接受 Android 渠道发的清单，忽略安装包字段', () {
+      final available = UpdateService.parseAvailableVersion(
+        jsonEncode(manifest),
+        currentVersionCode: 1,
+      );
+      expect(available, isNotNull);
+      expect(available!.versionName, '1.0.1');
+      expect(available.versionCode, 2);
+      expect(available.releaseNotes, ['修复练习恢复', '优化题图加载']);
+    });
+
+    test('清单里没有 apkUrl/sha256/size 也能解析', () {
+      final lean = Map<String, Object>.from(manifest)
+        ..remove('apkUrl')
+        ..remove('apkSha256')
+        ..remove('apkSize');
+      final available = UpdateService.parseAvailableVersion(
+        jsonEncode(lean),
+        currentVersionCode: 1,
+      );
+      expect(available?.versionCode, 2);
+    });
+
+    test('平台字段不是 android 也不拦（与 parseManifest 的差别）', () {
+      final ios = Map<String, Object>.from(manifest)..['platform'] = 'ios';
+      expect(
+        UpdateService.parseAvailableVersion(
+          jsonEncode(ios),
+          currentVersionCode: 1,
+        )?.versionCode,
+        2,
+      );
+      // 同一个清单走 Android 的严格解析仍会被平台校验拦下。
+      expect(
+        () => UpdateService.parseManifest(
+          jsonEncode(ios),
+          currentVersionCode: 1,
+        ),
+        throwsA(isA<UpdateException>()),
+      );
+    });
+
+    test('当前版本不比清单旧时返回 null', () {
+      for (final current in [2, 3]) {
+        expect(
+          UpdateService.parseAvailableVersion(
+            jsonEncode(manifest),
+            currentVersionCode: current,
+          ),
+          isNull,
+        );
+      }
+    });
+
+    test('仍然校验证件编号与版本名称', () {
+      final badSchema = Map<String, Object>.from(manifest)..['schemaVersion'] = 2;
+      expect(
+        () => UpdateService.parseAvailableVersion(
+          jsonEncode(badSchema),
+          currentVersionCode: 1,
+        ),
+        throwsA(isA<UpdateException>()),
+      );
+      final noName = Map<String, Object>.from(manifest)..['versionName'] = '  ';
+      expect(
+        () => UpdateService.parseAvailableVersion(
+          jsonEncode(noName),
+          currentVersionCode: 1,
+        ),
+        throwsA(isA<UpdateException>()),
+      );
+    });
+
+    test('未配置更新源时报错而不是静默返回 null', () async {
+      final service = UpdateService(manifestUrl: '');
+      await expectLater(
+        service.checkForVersionOnly(),
+        throwsA(isA<UpdateException>()),
+      );
+    });
+  });
+
 }

@@ -72,7 +72,9 @@ ipa 里**不含题库**（这也是它能公开分发的原因）。第一次打
 
 ## 升级到新版本
 
-iOS 端**没有应用内更新**（应用内检查更新只对 Android 生效，见 `lib/features/updates/update_flow.dart:17`）。升级流程：
+iOS 端**不能在应用内安装更新**（只装签名包，自签还 7 天过期），但能**发现新版本**：启动时和设置页「检查更新」都会读同一份 [update-manifest.json](https://kuangshuati.124145.xyz/update-manifest.json)，有新版本就弹窗，「去下载」会打开 [Releases](https://github.com/xinghe-labs/kuangshuati/releases) 让你下新 ipa（打不开浏览器时自动把链接复制到剪贴板）。版本比较用的是 `Info.plist` 里的 `CFBundleVersion`，即 pubspec 的 `+N`。
+
+升级流程：
 
 1. 等新版本 CI 跑完，下载新的 `kuangshuati-<新版本>-unsigned.ipa`；
 2. 先导出一次 `.gkbackup` 备份；

@@ -6,8 +6,9 @@ import UniformTypeIdentifiers
 /// iOS 侧的原生出入口实现，与 Android 的 MainActivity 保持同名 MethodChannel。
 ///
 /// - `com.kuangshuati.app/backup`：备份文件的分享、另存为、从文件选择器导入。
-/// - `com.kuangshuati.app/updates`：只实现 `getVersion`；iOS 无法自行安装
-///   APK，更新相关方法一律返回 notImplemented，Dart 侧会降级为「不可更新」。
+/// - `com.kuangshuati.app/updates`：实现 `getVersion` 与 `openUrl`；iOS 无法
+///   自行安装 APK，安装类方法一律返回 notImplemented，Dart 侧降级为
+///   「发现新版本 → 引导去 Releases 下载 ipa」。
 final class KuangshuatiChannels: NSObject {
   private static let backupChannelName = "com.kuangshuati.app/backup"
   private static let updatesChannelName = "com.kuangshuati.app/updates"
@@ -209,7 +210,7 @@ final class KuangshuatiChannels: NSObject {
     return controller
   }
 
-  // MARK: - 更新（iOS 仅提供版本号）
+  // MARK: - 更新（iOS 提供版本号与跳转下载页）
 
   private func handleUpdates(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
@@ -221,6 +222,23 @@ final class KuangshuatiChannels: NSObject {
         "versionName": name,
         "versionCode": Int64(build) ?? 0,
       ])
+
+    case "openUrl":
+      // 只放行 https：Dart 侧传的是固定的 Releases 地址，这里再拦一道，
+      // 避免以后误传 file:// 或自定义 scheme 被当成外链打开。
+      guard
+        let args = call.arguments as? [String: Any],
+        let raw = args["url"] as? String,
+        let url = URL(string: raw),
+        url.scheme?.lowercased() == "https"
+      else {
+        result(FlutterError(code: "invalid_url", message: "下载地址无效", details: nil))
+        return
+      }
+      UIApplication.shared.open(url, options: [:]) { opened in
+        result(opened)
+      }
+
     default:
       // canInstallPackages / openInstallPermissionSettings / installApk
       // 都是 Android APK 专用，iOS 上不存在对应能力。

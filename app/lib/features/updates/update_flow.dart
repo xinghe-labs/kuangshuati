@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
@@ -13,11 +14,16 @@ Future<void> checkForAppUpdate(
   required bool manual,
 }) async {
   // 应用内更新靠下载 APK 交给系统安装器，只有 Android 有这条链路。
-  // iOS/Web 上不拦的话会白下载 60MB 安装包，最后报“无法启动系统安装器”。
+  // iOS 装不了 APK，但可以告诉用户「有新版本」并引导去下新的 ipa；
+  // 桌面/Web 连这条路都没有。
   if (!Platform.isAndroid) {
-    if (manual && context.mounted) {
-      _showMessage(context, '当前平台不支持应用内更新，请通过分发渠道获取新版本');
+    if (!Platform.isIOS) {
+      if (manual && context.mounted) {
+        _showMessage(context, '当前平台不支持应用内更新，请通过分发渠道获取新版本');
+      }
+      return;
     }
+    await _checkForIosVersion(context, ref, manual: manual);
     return;
   }
   final service = ref.read(updateServiceProvider);
@@ -35,7 +41,10 @@ Future<void> checkForAppUpdate(
         canPop: !update.mandatory,
         child: AlertDialog(
           title: Text('发现新版本 ${update.versionName}'),
-          content: _ReleaseNotes(update: update),
+          content: _ReleaseNotes(
+          versionCode: update.versionCode,
+          notes: update.releaseNotes,
+        ),
           actions: [
             if (!update.mandatory)
               TextButton(
@@ -68,6 +77,59 @@ Future<void> checkForAppUpdate(
   }
 }
 
+/// iOS：只能告知 + 引导去下载新 ipa（Sideloadly 覆盖安装），无法在应用内装。
+///
+/// 与 Android 的差别：不锁死对话框（安装本就得手动做，强行阻断只会让人
+/// 没法用 App），也不下载任何东西。
+Future<void> _checkForIosVersion(
+  BuildContext context,
+  WidgetRef ref, {
+  required bool manual,
+}) async {
+  final service = ref.read(updateServiceProvider);
+  try {
+    final update = await service.checkForVersionOnly();
+    if (!context.mounted) return;
+    if (update == null) {
+      if (manual) _showMessage(context, '当前已是最新版本');
+      return;
+    }
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('发现新版本 ${update.versionName}'),
+        content: _ReleaseNotes(
+          versionCode: update.versionCode,
+          notes: update.releaseNotes,
+          hint: 'iOS 需要下载新的 ipa，用 Sideloadly 覆盖安装；同一个 Apple ID 签名会保留作答记录。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('稍后'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('去下载'),
+          ),
+        ],
+      ),
+    );
+    if (accepted != true || !context.mounted) return;
+    if (await service.openReleasePage()) return;
+    // 原生通道打不开（旧版原生实现/桌面端）时，至少把链接给到手上。
+    await Clipboard.setData(const ClipboardData(text: iosReleasePageUrl));
+    if (!context.mounted) return;
+    _showMessage(context, '已复制下载链接，用 Safari 打开即可');
+  } on UpdateException catch (error) {
+    if (context.mounted && manual) _showMessage(context, error.message);
+  } on Exception {
+    if (context.mounted && manual) {
+      _showMessage(context, '检查更新失败，请稍后重试');
+    }
+  }
+}
+
 void _showMessage(BuildContext context, String message) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
@@ -75,24 +137,30 @@ void _showMessage(BuildContext context, String message) {
 }
 
 class _ReleaseNotes extends StatelessWidget {
-  const _ReleaseNotes({required this.update});
+  const _ReleaseNotes({
+    required this.versionCode,
+    required this.notes,
+    this.hint,
+  });
 
-  final UpdateInfo update;
+  final int versionCode;
+  final List<String> notes;
+
+  /// 平台相关的额外提示（例如 iOS 得自己签名安装）。
+  final String? hint;
 
   @override
   Widget build(BuildContext context) {
-    final notes = update.releaseNotes.isEmpty
-        ? const ['包含稳定性与使用体验改进。']
-        : update.releaseNotes;
+    final lines = notes.isEmpty ? const ['包含稳定性与使用体验改进。'] : notes;
     return SizedBox(
       width: 360,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('版本号 ${update.versionCode}'),
+          Text('版本号 $versionCode'),
           const SizedBox(height: 12),
-          ...notes.map(
+          ...lines.map(
             (note) => Padding(
               padding: const EdgeInsets.only(bottom: 7),
               child: Row(
@@ -104,6 +172,13 @@ class _ReleaseNotes extends StatelessWidget {
               ),
             ),
           ),
+          if (hint != null) ...[
+            const SizedBox(height: 5),
+            Text(
+              hint!,
+              style: TextStyle(color: AppColors.muted, height: 1.5),
+            ),
+          ],
         ],
       ),
     );
