@@ -1,8 +1,13 @@
 name: iOS Build Check
 
-# 只做编译验证，不产出可安装包：没有签名证书时 iOS 无法出 ipa。
-# 目的是让 Swift 代码（尤其 ios/Runner/KuangshuatiChannels.swift）在真实的
-# Xcode 工具链下过一遍编译，避免长期处于「从未编译」状态。
+# 在真实 Xcode 工具链上编译 iOS，并额外产出一个「未签名 ipa」artifact。
+# 两个目的：
+# 1. 让 Swift 代码（尤其 ios/Runner/KuangshuatiChannels.swift）过一遍编译，
+#    避免长期处于「从未编译」状态；
+# 2. 给「没有 Mac、只自己 iPhone 用」的场景提供可侧载的包 —— 未签名 ipa
+#    不能直接安装，需要用 Sideloadly / AltStore 以 Apple ID 重签后安装
+#    （免费证书 7 天有效，到期重签即可，App 内数据不受影响）。
+# 这里不产出可上架的签名包：那需要 Apple Developer 证书与 provisioning profile。
 on:
   workflow_dispatch:
   push:
@@ -39,6 +44,24 @@ jobs:
         working-directory: app
         run: flutter pub get
 
+      # 版本号的唯一来源是 app/pubspec.yaml 的 `version: 1.1.2+12`，
+      # 与 Android 产物（kuangshuati-1.1.2+12.apk）命名保持一致。
+      - name: Resolve app version
+        id: version
+        working-directory: app
+        run: |
+          set -euo pipefail
+          raw=$(grep -m1 '^version:' pubspec.yaml | sed 's/^version:[[:space:]]*//' | tr -d '\r')
+          name="${raw%%+*}"
+          build="${raw##*+}"
+          if [ -z "$name" ] || [ -z "$build" ] || [ "$name" = "$build" ]; then
+            echo "无法从 pubspec.yaml 解析出版本号（需要 版本+build 形式），原始值：'$raw'"
+            exit 1
+          fi
+          echo "version_name=$name" >> "$GITHUB_OUTPUT"
+          echo "build_number=$build" >> "$GITHUB_OUTPUT"
+          echo "解析到版本 $name+$build"
+
       - name: Analyze Dart
         working-directory: app
         run: flutter analyze
@@ -74,6 +97,36 @@ jobs:
             exit 1
           }
           echo "OK: backup 通道已编译进 Runner 二进制"
+
+      # 打成未签名 ipa（Payload/Runner.app 的 zip）。签名不在这里做：
+      # 侧载工具会用自己的 Apple ID 重新签名。
+      - name: Package unsigned ipa
+        working-directory: app
+        env:
+          VERSION_TAG: ${{ steps.version.outputs.version_name }}+${{ steps.version.outputs.build_number }}
+        run: |
+          set -euo pipefail
+          cd build/ios/iphoneos
+          ipa="kuangshuati-${VERSION_TAG}-unsigned.ipa"
+          mkdir -p Payload
+          cp -R Runner.app Payload/
+          # 侧载工具按 ipa 结构识别，必须是 Payload/Runner.app 这一层。
+          rm -f "$ipa"
+          # -y 保留 Flutter.framework 内部的符号链接，侧载工具重签依赖它们。
+          zip -qry "$ipa" Payload
+          ls -lh "$ipa"
+          # 用 sed 而不是 head：pipefail 下 head 提前关闭管道会让 unzip 吃 SIGPIPE。
+          unzip -l "$ipa" | sed -n '1,20p'
+          test -f "$ipa"
+
+      - name: Upload unsigned ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-ipa-${{ steps.version.outputs.version_name }}+${{ steps.version.outputs.build_number }}
+          path: app/build/ios/iphoneos/kuangshuati-*-unsigned.ipa
+          if-no-files-found: error
+          # 包内不含题库（题库首次启动时下载），体积小，留 30 天够重装几轮。
+          retention-days: 30
 
       - name: Upload build log on failure
         if: failure()

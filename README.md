@@ -36,6 +36,14 @@
 >
 > 试用版数据存在浏览器本地，清理站点数据即清空。
 
+### iOS（未签名 ipa，需自行签名）
+
+没有 Mac 也能拿到 iOS 包：[`ios-build.yml`](.github/workflows/ios-build.yml) 每次改动后在 macOS runner 上编译，并产出一个**未签名 ipa**（文件名 `kuangshuati-<版本>-unsigned.ipa`，在 Actions 的 Artifacts 里下载 `ios-unsigned-ipa-<版本>`）。
+
+iOS 只运行签名过的 App，所以这个 ipa **不能直接安装**：需要用 [Sideloadly](https://sideloadly.io/) 等工具，以自己的 Apple ID 重签后侧载。免费 Apple ID 签名的有效期是 7 天，到期重签一次即可（App 内数据保留）。完整步骤、注意事项与常见问题见 [docs/ios-sideload.md](docs/ios-sideload.md)。
+
+> 未签名 ipa 不包含题库（题库仍是首次启动时下载），也不含任何开发者证书。目前不提供 TestFlight / App Store 版本，iOS 真机验收仍在待办中（见 Roadmap）。
+
 ## 功能
 
 - **真离线**：题库与题图全部落在本地 SQLite，装好题库断网可用。
@@ -56,7 +64,8 @@
 
 - [x] Android 正式发布（v1.1.2）
 - [x] Web 构建支持，在线试用版已部署到 GitHub Pages
-- [ ] iOS 支持：代码同构，CI 已做编译验证；缺签名证书，上架时间待定
+- [x] iOS 未签名 ipa：CI 构建，自备 Apple ID 自行签名侧载（见 [docs/ios-sideload.md](docs/ios-sideload.md)）
+- [ ] iOS 正式分发（TestFlight / App Store）：代码同构，CI 已做编译验证；缺 Apple Developer 证书，上架时间待定
 - [ ] 题库内容更新：应用内已支持版本检查，公开的更新节奏待定
 
 ---
@@ -137,7 +146,7 @@ docs/                 # 内容清单示例、自定义题库格式文档与示�
 
 ## English
 
-**Kuangshuati** ("Crazy Drills") is an offline-first Flutter app for practicing the aptitude section (行测 / xingce) of China's civil-service exam. No account, no sign-in, no analytics — your answers never leave your device. The full question bank (one-time in-app download, ~145 MB, SHA-256 verified) lives in local SQLite, and everything works fully offline afterwards: six practice modes, error review, mock exams with countdown auto-submit, cross-device backup via `.gkbackup` files. Source is open under Apache-2.0 — grab the Android APK from [Releases](https://github.com/xinghe-labs/kuangshuati/releases); a Web build is supported, and iOS compiles in CI (signed release pending).
+**Kuangshuati** ("Crazy Drills") is an offline-first Flutter app for practicing the aptitude section (行测 / xingce) of China's civil-service exam. No account, no sign-in, no analytics — your answers never leave your device. The full question bank (one-time in-app download, ~145 MB, SHA-256 verified) lives in local SQLite, and everything works fully offline afterwards: six practice modes, error review, mock exams with countdown auto-submit, cross-device backup via `.gkbackup` files. Source is open under Apache-2.0 — grab the Android APK from [Releases](https://github.com/xinghe-labs/kuangshuati/releases); a Web build is supported, and iOS compiles in CI with an unsigned ipa artifact that you can self-sign with your own Apple ID (see [docs/ios-sideload.md](docs/ios-sideload.md); a signed release is still pending).
 
 ---
 
