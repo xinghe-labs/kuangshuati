@@ -8,8 +8,7 @@ import 'core/router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/content/content_install_page.dart';
 import 'features/content/content_manager_base.dart';
-import 'features/reminder/reminder_scheduler.dart'
-    if (dart.library.js_interop) 'features/reminder/reminder_scheduler_web.dart';
+import 'features/reminder/reminder_scheduler.dart';
 
 /// 应用外壳：题库没准备好时停在下载页，准备好后进路由。
 ///

@@ -13,8 +13,7 @@ import '../../shared/widgets/app_widgets.dart';
 import '../practice/mock_paper.dart';
 import '../practice/practice_launcher.dart';
 import '../practice/time_budget.dart';
-import '../settings/settings_platform_io.dart'
-    if (dart.library.js_interop) '../settings/settings_platform_web.dart';
+import '../settings/settings_platform_io.dart';
 import '../widget/home_widget_sync.dart';
 
 class HomePage extends ConsumerStatefulWidget {

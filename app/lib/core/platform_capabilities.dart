@@ -1,5 +1,4 @@
-import 'platform_capabilities_io.dart'
-    if (dart.library.js_interop) 'platform_capabilities_web.dart';
+import 'platform_capabilities_io.dart';
 
 /// 各平台能力开关。
 ///

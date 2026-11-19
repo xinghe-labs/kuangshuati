@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../features/reminder/reminder_scheduler.dart'
-    if (dart.library.js_interop) '../features/reminder/reminder_scheduler_web.dart';
+import '../features/reminder/reminder_scheduler.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:path_provider/path_provider.dart';
 

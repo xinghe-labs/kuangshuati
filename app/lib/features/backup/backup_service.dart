@@ -5,8 +5,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 import '../../data/database/app_database.dart';
-import 'gzip_codec_io.dart'
-    if (dart.library.js_interop) 'gzip_codec_web.dart' as gzip_codec;
+import 'gzip_codec_io.dart' as gzip_codec;
 
 /// 用户数据的备份与恢复（开发文档 §15）。
 ///

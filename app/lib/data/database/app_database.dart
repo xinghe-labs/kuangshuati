@@ -3,8 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../domain/models.dart';
-import 'database_connection_io.dart'
-    if (dart.library.js_interop) 'database_connection_web.dart';
+import 'database_connection_io.dart';
 
 part 'app_database.g.dart';
 

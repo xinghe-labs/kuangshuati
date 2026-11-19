@@ -24,17 +24,7 @@
 
 ## 下载安装
 
-不想编译源码？从 [Releases](https://github.com/xinghe-labs/kuangshuati/releases) 下载最新签名 APK（当前 v1.1.2，sha256 `9d7a90e1…`）。应用内更新走 [update-manifest.json](https://kuangshuati.124145.xyz/update-manifest.json)。首次启动在应用内下载题库（约 145 MB，SHA-256 校验后安装），之后全程离线。
-
-### 在线试用（不用装）
-
-**👉 [xinghe-labs.github.io/kuangshuati](https://xinghe-labs.github.io/kuangshuati/)**
-
-浏览器直接打开就能点：练习流程、逐题解析、整卷模考倒计时、交卷后统一判分、错题本、统计都能跑通。
-
-> ⚠️ 试用版只内置 **12 道演示题**（完整题库源自私有仓库，不随公开版分发）。想真正刷真题，请下载 APK。
->
-> 试用版数据存在浏览器本地，清理站点数据即清空。
+不想编译源码？从 [Releases](https://github.com/xinghe-labs/kuangshuati/releases) 下载最新签名 APK（当前 v1.1.3，sha256 `0d39385c…`）。应用内更新走 [update-manifest.json](https://kuangshuati.124145.xyz/update-manifest.json)。首次启动在应用内下载题库（约 145 MB，SHA-256 校验后安装），之后全程离线。
 
 ### iOS（未签名 ipa，需自行签名）
 
@@ -83,29 +73,6 @@ flutter pub get
 flutter run
 ```
 
-Web 版：
-
-```bash
-flutter run -d chrome --target=lib/main_web.dart        # 本地调试
-flutter build web --target=lib/main_web.dart            # 构建产物在 build/web
-```
-
-Web 端有独立入口 `lib/main_web.dart`（原生入口 `lib/main.dart` 依赖 `dart:ffi`/sqlite3，不能用于 Web 构建）。
-
-公开在线试用版由 `.github/workflows/web-demo.yml` 自动构建部署，额外加两个参数：
-
-```bash
-flutter build web --release \
-  --target=lib/main_web.dart \
-  --dart-define=KSQ_WEB_TRIAL=seed \
-  --base-href=/kuangshuati/
-```
-
-- `KSQ_WEB_TRIAL=seed`：跳过题库下载流程，直接用内置的 12 道演示题（公开试用版不能分发私有题库）；
-- `--base-href=/kuangshuati/`：GitHub Pages 的仓库子路径。
-
-不带 `KSQ_WEB_TRIAL=seed` 时，Web 版走正常题库下载流程，行为与之前一致。
-
 测试：
 
 ```bash
@@ -123,9 +90,8 @@ app/                  # Flutter 应用主体
   lib/domain/         # 领域模型与业务逻辑
   lib/features/       # 按功能划分的页面与状态（practice、papers、stats…）
   lib/shared/         # 跨功能共享的组件
-  web/                # Web 端入口（sqlite3.wasm、drift_worker）
 docs/                 # 内容清单示例、自定义题库格式文档与示例
-.github/workflows/    # CI（静态分析+测试）、iOS 编译验证、Web 试用版部署
+.github/workflows/    # CI（静态分析+测试）、iOS 编译验证
 ```
 
 ## 题库数据

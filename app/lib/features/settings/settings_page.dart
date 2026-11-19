@@ -9,10 +9,8 @@ import '../content/bank_format_help.dart';
 import '../content/bank_manager_page.dart';
 import '../content/content_import_models.dart';
 import '../content/content_manager_base.dart';
-import '../reminder/reminder_scheduler.dart'
-    if (dart.library.js_interop) '../reminder/reminder_scheduler_web.dart';
-import 'settings_platform_io.dart'
-    if (dart.library.js_interop) 'settings_platform_web.dart';
+import '../reminder/reminder_scheduler.dart';
+import 'settings_platform_io.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
