@@ -24,7 +24,7 @@
 
 ## 下载安装
 
-不想编译源码？直接下载签名 APK：[kuangshuati-1.1.2+12.apk](https://kuangshuati.124145.xyz/kuangshuati-1.1.2+12-9d7a90e11983.apk)（当前 v1.1.2，sha256 `9d7a90e1…`）；更新清单见 [update-manifest.json](https://kuangshuati.124145.xyz/update-manifest.json)。首次启动在应用内下载题库（约 145 MB，SHA-256 校验后安装），之后全程离线。
+不想编译源码？从 [Releases](https://github.com/xinghe-labs/kuangshuati/releases) 下载最新签名 APK（当前 v1.1.2，sha256 `9d7a90e1…`）。应用内更新走 [update-manifest.json](https://kuangshuati.124145.xyz/update-manifest.json)。首次启动在应用内下载题库（约 145 MB，SHA-256 校验后安装），之后全程离线。
 
 ### 在线试用（不用装）
 
