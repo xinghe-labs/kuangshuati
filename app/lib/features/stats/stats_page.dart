@@ -189,6 +189,7 @@ class StatsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final dailyState = ref.watch(dailyStatsProvider);
     final moduleState = ref.watch(moduleStatsProvider);
+    final countsState = ref.watch(moduleCountsProvider);
     final reviews = ref.watch(reviewItemsProvider);
     final streak = ref.watch(practiceStreakProvider);
 
@@ -281,19 +282,28 @@ class StatsPage extends ConsumerWidget {
           error: (error, stack) => Text('读取模块统计失败：$error'),
           data: (modules) {
             // 开发文档 §11.1：少于 10 道实际作答的模块不给出正确率，只标“数据较少”。
-            final active = modules
-                .where((item) => item.answeredCount > 0)
-                .toList();
-            if (active.isEmpty) {
+            //
+            // 这里列的是题库里的**全部**模块，没练过的也要出现：早先只渲染
+            // answeredCount > 0 的模块，没练过的模块一个都看不到。
+            final stats = {for (final item in modules) item.module: item};
+            final counts = countsState.value ?? const <String, int>{};
+            final names = <String>{...counts.keys, ...stats.keys}.toList()
+              ..sort((a, b) => compareModulesForPractice(a, b, stats, counts));
+            if (names.isEmpty) {
               return const AppEmptyState(
-                title: '还没有足够的模块数据',
-                message: '完成一组练习后，这里会指出最需要补强的模块。',
+                title: '还没有模块数据',
+                message: '题库还在加载，稍后再看这里。',
               );
             }
             return Column(
               children: [
-                for (final module in active) ...[
-                  _ModuleRow(module: module),
+                for (final name in names) ...[
+                  _ModuleRow(
+                    moduleName: name,
+                    module: stats[name],
+                    questionCount: counts[name] ?? 0,
+                    onTap: () => _startModule(context, ref, name),
+                  ),
                   const SizedBox(height: 9),
                 ],
               ],
@@ -392,16 +402,11 @@ class StatsPage extends ConsumerWidget {
       ),
     );
     if (file == null) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('成绩卡生成失败，请再试一次')),
-      );
+      messenger.showSnackBar(const SnackBar(content: Text('成绩卡生成失败，请再试一次')));
       return;
     }
     await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(file.path)],
-        text: '我的狂刷题成绩',
-      ),
+      ShareParams(files: [XFile(file.path)], text: '我的狂刷题成绩'),
     );
     // 分享完成后不立即删临时文件：微信/钉钢等目标可能还在读取，
     // 留在临时目录里由系统清理。
@@ -419,73 +424,98 @@ class StatsPage extends ConsumerWidget {
 }
 
 class _ModuleRow extends StatelessWidget {
-  const _ModuleRow({required this.module});
+  const _ModuleRow({
+    required this.moduleName,
+    required this.module,
+    required this.questionCount,
+    required this.onTap,
+  });
 
-  final ModuleStat module;
+  final String moduleName;
+
+  /// 没练过的模块为 null：仍然要列出来，只是不显示正确率。
+  final ModuleStat? module;
+  final int questionCount;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final rate = module.correctCount / module.answeredCount;
-    final enough = module.answeredCount >= kWeakModuleMinAnswered;
-    return Container(
-      padding: const EdgeInsets.all(14),
+    final stat = module;
+    final answered = stat?.answeredCount ?? 0;
+    final enough = answered >= kWeakModuleMinAnswered;
+    final rate = enough ? stat!.correctCount / answered : 0.0;
+    return Material(
       color: AppColors.surface,
-      child: Column(
-        children: [
-          Row(
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
             children: [
-              Expanded(
-                child: Text(
-                  module.module,
-                  style: Theme.of(context).textTheme.titleMedium,
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      moduleName,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  Text(
+                    answered == 0
+                        ? '未练'
+                        : enough
+                        ? '${(rate * 100).round()}%'
+                        : '数据较少',
+                    style: TextStyle(
+                      color: enough ? AppColors.ink : AppColors.muted,
+                      fontSize: enough ? 17 : 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  value: enough ? rate.clamp(0, 1) : 0,
+                  minHeight: 5,
+                  backgroundColor: AppColors.softFill,
+                  valueColor: AlwaysStoppedAnimation(
+                    enough ? AppColors.ink : AppColors.softFill,
+                  ),
                 ),
               ),
-              Text(
-                enough ? '${(rate * 100).round()}%' : '数据较少',
-                style: TextStyle(
-                  color: enough ? AppColors.ink : AppColors.muted,
-                  fontSize: enough ? 17 : 13,
-                  fontWeight: FontWeight.w700,
-                ),
+              const SizedBox(height: 7),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      answered == 0
+                          ? '$questionCount 题'
+                          : '${stat!.correctCount} / $answered 题',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // 右侧那句「再做 N 题后看正确率」很长，早先和左边
+                  // 用 Spacer 硬挤一行，320 宽 + 字号 1.3 就向右溢出 25px。
+                  Flexible(
+                    child: Text(
+                      answered == 0
+                          ? '点一下开始练'
+                          : enough
+                          ? '${(stat!.durationMs / 60000).round()} 分钟'
+                          : '再做 ${kWeakModuleMinAnswered - answered} 题后看正确率',
+                      textAlign: TextAlign.right,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(2),
-            child: LinearProgressIndicator(
-              value: enough ? rate.clamp(0, 1) : 0,
-              minHeight: 5,
-              backgroundColor: AppColors.softFill,
-              valueColor: AlwaysStoppedAnimation(
-                enough ? AppColors.ink : AppColors.softFill,
-              ),
-            ),
-          ),
-          const SizedBox(height: 7),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${module.correctCount} / ${module.answeredCount} 题',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-              const SizedBox(width: 8),
-              // 右侧那句「再做 N 题后看正确率」很长，早先和左边
-              // 用 Spacer 硬挤一行，320 宽 + 字号 1.3 就向右溢出 25px。
-              Flexible(
-                child: Text(
-                  enough
-                      ? '${(module.durationMs / 60000).round()} 分钟'
-                      : '再做 ${kWeakModuleMinAnswered - module.answeredCount} 题后看正确率',
-                  textAlign: TextAlign.right,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }

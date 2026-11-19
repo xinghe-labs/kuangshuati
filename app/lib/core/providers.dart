@@ -37,6 +37,15 @@ final contentStatsProvider = FutureProvider<ContentStats>((ref) {
   return Future.value(ref.watch(contentRepositoryProvider).stats());
 });
 
+/// 题库里每个模块有多少题。
+///
+/// 首页「按模块刷题」和统计页「模块表现」都要列出同一批模块：
+/// 只靠 moduleStats 表只能看到练过的模块，没练过的模块会整个消失，
+/// 用户点了「全部模块」也找不到它们。
+final moduleCountsProvider = FutureProvider<Map<String, int>>((ref) {
+  return Future.value(ref.watch(contentRepositoryProvider).moduleCounts());
+});
+
 final recentPapersProvider = FutureProvider<List<Paper>>((ref) {
   return Future.value(
     ref.watch(contentRepositoryProvider).recentPapers(limit: 5),

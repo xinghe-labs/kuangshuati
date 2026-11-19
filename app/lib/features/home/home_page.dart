@@ -186,12 +186,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
     if (!context.mounted) return;
     if (restart) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
-        const SnackBar(
-          content: Text('题库里能练的题都练过了，这次从第一题重新开始（已做过的题也会出现）'),
-        ),
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('题库里能练的题都练过了，这次从第一题重新开始（已做过的题也会出现）')),
       );
     }
     await launchPractice(
@@ -456,11 +452,13 @@ class _StartPanel extends StatelessWidget {
   }
 }
 
-/// 首页「按模块刷题」：6 个模块一屏可见，点一下就开一组默认 20 题。
+/// 首页「按模块刷题」：只放最需要动手的 3 个模块，点一下就开一组默认 20 题。
 ///
-/// 为什么不做成第 7 张卡片：2 列网格塞 7 张会空出半行；更要紧的是
-/// 「补弱项」得把正确率摆出来——弱项排第一并标红，用户一眼看到该练哪个。
-/// 从没练过的模块不参与「最弱」评选（没数据 ≠ 差），排在有数据的后面。
+/// 为什么只放 3 个：360×800 的真机上 6 张卡要占两行半（~144px），会把
+/// 「直接开始」整块挤出首屏；而其中大半是「未练」，对今天练什么没有信息量。
+/// 全部 6 个模块走右侧「全部模块」进统计页看，那里本来就完整。
+/// 弱项排第一并标红，用户一眼看到该练哪个；从没练过的模块不参与
+/// 「最弱」评选（没数据 ≠ 差），排在有数据的后面。
 class _ModulePracticeSection extends ConsumerStatefulWidget {
   const _ModulePracticeSection();
 
@@ -471,8 +469,9 @@ class _ModulePracticeSection extends ConsumerStatefulWidget {
 
 class _ModulePracticeSectionState
     extends ConsumerState<_ModulePracticeSection> {
-  late final Future<Map<String, int>> _countsFuture =
-      Future.value(ref.read(contentRepositoryProvider).moduleCounts());
+  late final Future<Map<String, int>> _countsFuture = Future.value(
+    ref.read(contentRepositoryProvider).moduleCounts(),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -521,32 +520,180 @@ class _ModulePracticeSectionState
             SectionHeading(
               title: '按模块刷题',
               action: TextButton(
-                onPressed: () => context.go('/stats'),
+                // 直接弹出全部模块列表：早先是跳到统计页，还得自己往下划半屏
+                // 才能看到模块，等于把入口当成了一个跳转。
+                onPressed: () =>
+                    _showAllModules(context, names, counts, stats, weakest),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                 ),
-                child: const Text('查看统计'),
+                child: const Text('全部模块 →'),
               ),
             ),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            // 固定三列等宽：模块名长的（言语理解与表达）靠 scaleDown 缩，
+            // 不用省略号，也不会换行把这一节撑高。
+            Row(
               children: [
-                for (final name in names)
-                  _ModuleChip(
-                    module: name,
-                    questionCount: counts[name] ?? 0,
-                    stat: stats[name],
-                    isWeakest: name == weakest,
-                    onTap: () =>
-                        launchModulePractice(context, ref, module: name),
+                for (final (index, name) in names.take(3).indexed) ...[
+                  if (index > 0) const SizedBox(width: 8),
+                  Expanded(
+                    child: _ModuleChip(
+                      module: name,
+                      questionCount: counts[name] ?? 0,
+                      stat: stats[name],
+                      isWeakest: name == weakest,
+                      onTap: () =>
+                          launchModulePractice(context, ref, module: name),
+                    ),
                   ),
+                ],
               ],
             ),
           ],
         );
       },
+    );
+  }
+
+  /// 弹出全部模块列表：不用先去统计页再往下划，点哪个就练哪个。
+  Future<void> _showAllModules(
+    BuildContext context,
+    List<String> names,
+    Map<String, int> counts,
+    Map<String, ModuleStat> stats,
+    String? weakest,
+  ) {
+    return showModalBottomSheet<void>(
+      context: context,
+      // 用根 Navigator：否则 sheet 被夹在底部导航上方，6 个模块一行行排不下。
+      useRootNavigator: true,
+      showDragHandle: true,
+      backgroundColor: AppColors.surface,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Row(
+                children: [
+                  Text(
+                    '全部模块',
+                    style: Theme.of(sheetContext).textTheme.titleLarge,
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${names.length} 个',
+                    style: Theme.of(sheetContext).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                children: [
+                  for (final name in names)
+                    _ModuleTile(
+                      module: name,
+                      questionCount: counts[name] ?? 0,
+                      stat: stats[name],
+                      isWeakest: name == weakest,
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        launchModulePractice(context, ref, module: name);
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 全部模块列表里的一行：模块名 + 题量 + 状态，点一下直接开练。
+class _ModuleTile extends StatelessWidget {
+  const _ModuleTile({
+    required this.module,
+    required this.questionCount,
+    required this.stat,
+    required this.isWeakest,
+    required this.onTap,
+  });
+
+  final String module;
+  final int questionCount;
+  final ModuleStat? stat;
+  final bool isWeakest;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final stat = this.stat;
+    final accuracy = stat == null ? null : moduleAccuracy(stat);
+    final status = switch (accuracy) {
+      null => '未练',
+      _ when !isModuleSampleEnough(stat!) => '已做 ${stat.answeredCount} 题',
+      _ => '正确率 ${(accuracy * 100).round()}%',
+    };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: AppColors.paper,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    module,
+                    style: theme.textTheme.titleMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (isWeakest) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.negativeFill,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '最弱',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: AppColors.negative,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 10),
+                Text(
+                  questionCount > 0 ? '$questionCount 题 · $status' : status,
+                  style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_right, size: 20, color: AppColors.line),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -568,15 +715,14 @@ class _ModuleChip extends StatelessWidget {
   final VoidCallback onTap;
 
   String get _subtitle {
-    final base = '$questionCount 题';
     final current = stat;
-    if (current == null || current.answeredCount <= 0) return '$base · 未练';
+    if (current == null || current.answeredCount <= 0) return '未练';
     if (!isModuleSampleEnough(current)) {
       // 样本太少不给正确率：3 题错 1 题算出来的 66% 会误导人。
-      return '$base · 已做 ${current.answeredCount} 题';
+      return '已做 ${current.answeredCount} 题';
     }
     final rate = (moduleAccuracy(current)! * 100).round();
-    return '$base · 正确率 $rate%';
+    return '正确率 $rate%';
   }
 
   @override
@@ -592,23 +738,29 @@ class _ModuleChip extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
               Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    module,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        module,
+                        maxLines: 1,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
                   if (isWeakest) ...[
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 4),
                     Text(
                       '最弱',
                       style: TextStyle(
@@ -620,9 +772,10 @@ class _ModuleChip extends StatelessWidget {
                   ],
                 ],
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 2),
               Text(
                 _subtitle,
+                maxLines: 1,
                 style: TextStyle(fontSize: 11, color: AppColors.muted),
               ),
             ],
@@ -883,9 +1036,9 @@ class _RandomMockSheetState extends ConsumerState<_RandomMockSheet> {
           children: [
             Text(
               '随机模考',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 6),
             Text(
@@ -923,8 +1076,7 @@ class _RandomMockSheetState extends ConsumerState<_RandomMockSheet> {
                 ChoiceChip(
                   label: const Text('均匀分配'),
                   selected: _mix == RandomMockMix.even,
-                  onSelected: (_) =>
-                      setState(() => _mix = RandomMockMix.even),
+                  onSelected: (_) => setState(() => _mix = RandomMockMix.even),
                 ),
               ],
             ),
@@ -943,8 +1095,7 @@ class _RandomMockSheetState extends ConsumerState<_RandomMockSheet> {
                 final duration = randomMockDurationSeconds(expected);
                 final bankTotal =
                     available?.values.fold(0, (sum, item) => sum + item) ?? 0;
-                final insufficient =
-                    bankTotal > 0 && expected < _count;
+                final insufficient = bankTotal > 0 && expected < _count;
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -953,18 +1104,16 @@ class _RandomMockSheetState extends ConsumerState<_RandomMockSheet> {
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Text(
                           '题库共 $bankTotal 题，本次预计组成 $expected 题（目标 $_count）',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
+                          style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: AppColors.negative),
                         ),
                       ),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
-                        onPressed: () => Navigator.of(context).pop(
-                          (count: _count, mix: _mix),
-                        ),
+                        onPressed: () => Navigator.of(
+                          context,
+                        ).pop((count: _count, mix: _mix)),
                         child: Text(
                           '开始 · 预计 $expected 题 · ${formatLimitClock(duration)}',
                         ),
@@ -980,6 +1129,7 @@ class _RandomMockSheetState extends ConsumerState<_RandomMockSheet> {
     );
   }
 }
+
 /// 限时训练的档位选择弹层。
 ///
 /// 档位来自 time_budget.dart 的同一组常量（45/60/75/90/120 秒），
@@ -1006,9 +1156,9 @@ class _TimedTrainingSheetState extends State<_TimedTrainingSheet> {
           children: [
             Text(
               '限时训练',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 6),
             Text(
