@@ -152,7 +152,9 @@ jobs:
           fi
           # 同名附件覆盖，重跑不堆重复文件。
           gh release upload "$tag" "$IPA_PATH" --clobber
-          echo "已上传到 Release $tag："
+          # 变量名紧跟中文全角标点时必需 braces：macOS 的 bash 3.2 会把
+          # 「全角冒号」当成变量名的一部分，$tag： 会解析成变量 tag：→ set -u 报错。
+          echo "已上传到 Release ${tag}："
           gh release view "$tag" --json assets --jq '.assets[] | "\(.name)  \(.size) B"'
 
       - name: Upload build log on failure
