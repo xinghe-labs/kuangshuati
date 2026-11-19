@@ -166,6 +166,9 @@ void main() {
     );
     await tester.pump();
 
+    // 首页加了「按模块刷题」区块后，800x600 测试视口下这排卡片会落到屏幕外。
+    await tester.ensureVisible(find.text('随机模考'));
+    await tester.pump();
     await tester.tap(find.text('随机模考'));
     await tester.pump();
     await tester.runAsync(

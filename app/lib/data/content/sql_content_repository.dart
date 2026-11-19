@@ -181,8 +181,10 @@ class SqlContentRepository implements ContentRepository {
   Future<List<QuestionContent>> randomQuestions(
     int count, {
     String? module,
+    Iterable<String> excludeIds = const [],
   }) async {
     if (count <= 0) return const <QuestionContent>[];
+    final excluded = excludeIds.toSet();
     // 开发文档 §9.1 要求“材料组作为抽题最小单位”。但真实题库里有两类例外，
     // 都按单题抽，否则会一次抽出整库或整节：
     //   1) 43 904 道题的上游 groupId 为空，全部塔缩成一个伪组（group_id=''）；
@@ -193,8 +195,11 @@ class SqlContentRepository implements ContentRepository {
     // SQLite 为整库建临时排序表，而随机抽题并不需要 SQL 排任何东西。
     final groupIds = [
       for (final entry in index.byGroup.entries)
+        // 做过的题整组跳过：材料题组只要里面有一题在 [excludeIds] 里，
+        // 整组都不能出，否则材料会重复展示一遍、小题又重做一遍。
         if ((module == null || index.groupModule[entry.key] == module) &&
-            entry.value.length <= count)
+            entry.value.length <= count &&
+            !entry.value.any(excluded.contains))
           entry.key,
     ]..shuffle(_random);
     final chosen = <String>{};
@@ -220,7 +225,7 @@ class SqlContentRepository implements ContentRepository {
       ids.addAll(
         _sample([
           for (final id in pool)
-            if (!used.contains(id)) id,
+            if (!used.contains(id) && !excluded.contains(id)) id,
         ], count - ids.length),
       );
     }

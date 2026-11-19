@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kuangshuati/data/content/seed_content_repository.dart';
 import 'package:kuangshuati/data/database/app_database.dart';
 import 'package:kuangshuati/domain/models.dart';
-import 'package:kuangshuati/features/stats/stats_page.dart';
+import 'package:kuangshuati/domain/module_stats.dart';
 
 void main() {
   final repository = SeedContentRepository();

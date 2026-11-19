@@ -45,7 +45,19 @@ abstract class ContentRepository {
 
   FutureOr<List<QuestionContent>> questionsByIds(Iterable<String> ids);
 
-  FutureOr<List<QuestionContent>> randomQuestions(int count, {String? module});
+  /// 随机抽题。
+  ///
+  /// [module] 限定模块（为空时全库随机）。[excludeIds] 用于跳过用户已经
+  /// 做过的题：按模块刷题要能持续刷下去，否则同一个模块刷三轮会大量撞题。
+  ///
+  /// 材料组整组抽：组里只要有一题在 [excludeIds] 里就整组跳过，否则会出现
+  /// 「材料做过了、小题又出一次」——材料重复展示比漏题更伤体验。
+  /// 池子抽空时返回不足 [count] 条，由调用方决定是否回退。
+  FutureOr<List<QuestionContent>> randomQuestions(
+    int count, {
+    String? module,
+    Iterable<String> excludeIds = const [],
+  });
 
   /// 各模块题量分布（随机模考配比用），题量降序不做要求，
   /// 由调用方自行排序。

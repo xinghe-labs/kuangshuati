@@ -20,8 +20,11 @@ class _BrokenRepository extends SeedContentRepository {
   }) => throw StateError('题库文件损坏');
 
   @override
-  List<QuestionContent> randomQuestions(int count, {String? module}) =>
-      throw StateError('题库文件损坏');
+  List<QuestionContent> randomQuestions(
+    int count, {
+    String? module,
+    Iterable<String> excludeIds = const [],
+  }) => throw StateError('题库文件损坏');
 
   @override
   List<Paper> recentPapers({int limit = 5}) => const [];

@@ -22,8 +22,15 @@ class _StubContentRepository extends SeedContentRepository {
   final List<QuestionContent> questions;
 
   @override
-  List<QuestionContent> randomQuestions(int count, {String? module}) =>
-      questions.take(count).toList();
+  List<QuestionContent> randomQuestions(
+    int count, {
+    String? module,
+    Iterable<String> excludeIds = const [],
+  }) => questions
+      .where((q) => module == null || q.module == module)
+      .where((q) => !excludeIds.contains(q.id))
+      .take(count)
+      .toList();
 
   @override
   List<QuestionContent> sequenceQuestions({
@@ -129,6 +136,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('继续练习'), findsOneWidget);
 
+    // 首页加了「按模块刷题」区块后，这排卡片落到 800x600 视口外；
+    // AppPage 是 ListView，没进视口的子项根本不会建出来，必须先滚过去。
+    await tester.scrollUntilVisible(
+      find.text('随机 20 题'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
     await tester.tap(find.text('随机 20 题'));
     await _settle(tester, 500);
     await tester.pumpAndSettle();
@@ -202,6 +217,14 @@ void main() {
     await _settle(tester, 500);
     await tester.pumpAndSettle();
 
+    // 首页加了「按模块刷题」区块后，这排卡片落到 800x600 视口外；
+    // AppPage 是 ListView，没进视口的子项根本不会建出来，必须先滚过去。
+    await tester.scrollUntilVisible(
+      find.text('随机 20 题'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
     await tester.tap(find.text('随机 20 题'));
     await _settle(tester, 500);
     await tester.pumpAndSettle();

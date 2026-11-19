@@ -260,9 +260,18 @@ class SeedContentRepository implements ContentRepository {
   }
 
   @override
-  List<QuestionContent> randomQuestions(int count, {String? module}) {
+  List<QuestionContent> randomQuestions(
+    int count, {
+    String? module,
+    Iterable<String> excludeIds = const [],
+  }) {
+    final excluded = excludeIds.toSet();
     final pool = questions
-        .where((question) => module == null || question.module == module)
+        .where(
+          (question) =>
+              (module == null || question.module == module) &&
+              !excluded.contains(question.id),
+        )
         .toList();
     pool.shuffle(Random(42));
     return pool.take(count).toList(growable: false);

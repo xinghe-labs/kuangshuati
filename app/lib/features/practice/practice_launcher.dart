@@ -110,6 +110,9 @@ Future<void> launchPractice(
 enum _ReplaceDecision { resume, replace }
 
 
+/// 按模块刷题的默认题量（首页模块区块与统计页弱项入口共用）。
+const int kModulePracticeCount = 20;
+
 /// 把「读题库」失败的异常变成一句用户能看懂的话。
 ///
 /// 首页/统计/题库页在点入口时直接 await 题库读取，题库文件损坏、
@@ -147,6 +150,80 @@ Future<List<QuestionContent>> randomQuestions(
 }) {
   return Future.value(
     ref.read(contentRepositoryProvider).randomQuestions(count, module: module),
+  );
+}
+
+/// 按模块刷题：优先出没做过的题，该模块未做过的题不够一组时才回退掺入
+/// 做过的题，并明确告知。
+///
+/// 为什么要去重：按模块刷题的价值在于“把一个模块刷下去”，而纯随机在同一
+/// 个模块里反复撞到刚做过的题——刷三轮等于刷一轮，“补弱项”就无从谈起。
+/// 首页模块区块与统计页弱项入口都走这里，两处口径不能不一致。
+Future<void> launchModulePractice(
+  BuildContext context,
+  WidgetRef ref, {
+  required String module,
+  int count = kModulePracticeCount,
+}) async {
+  final database = ref.read(databaseProvider);
+  final repository = ref.read(contentRepositoryProvider);
+  final picked = <QuestionContent>[];
+  var addedAnswered = false;
+  try {
+    final answered = await database.answeredQuestionIds();
+    picked.addAll(
+      await Future.value(
+        repository.randomQuestions(
+          count,
+          module: module,
+          excludeIds: answered,
+        ),
+      ),
+    );
+    if (picked.length < count) {
+      // 未做过的题不够一组（这个模块快刷完了）：用做过的题补到 count，
+      // 但绝不出现重复 id，否则同一组练习里会有两道一模一样的题。
+      final seen = {for (final question in picked) question.id};
+      final fallback = await Future.value(
+        repository.randomQuestions(count, module: module),
+      );
+      for (final question in fallback) {
+        if (picked.length >= count) break;
+        if (seen.add(question.id)) {
+          picked.add(question);
+          addedAnswered = true;
+        }
+      }
+    }
+  } on Object catch (error) {
+    if (context.mounted) showContentError(context, error);
+    return;
+  }
+  if (!context.mounted) return;
+  if (picked.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('「$module」暂时没有可练习的题目')),
+    );
+    return;
+  }
+  if (addedAnswered) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('「$module」未做过的题不足 $count 道，这次掺入了一部分做过的题'),
+      ),
+    );
+  } else if (picked.length < count) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('「$module」只有 ${picked.length} 道题，本次全出')),
+    );
+  }
+  await launchPractice(
+    context,
+    ref,
+    mode: PracticeMode.custom,
+    title: '$module · 定向练习',
+    questions: picked,
+    requestedCount: count,
   );
 }
 

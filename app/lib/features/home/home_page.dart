@@ -8,6 +8,7 @@ import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/database/app_database.dart';
 import '../../domain/models.dart';
+import '../../domain/module_stats.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../practice/mock_paper.dart';
 import '../practice/practice_launcher.dart';
@@ -99,6 +100,8 @@ class _HomePageState extends ConsumerState<HomePage> {
             MetricItem('待复习', '$dueCount', '题'),
           ],
         ),
+        const SizedBox(height: 22),
+        const _ModulePracticeSection(),
         const SizedBox(height: 22),
         const SectionHeading(title: '直接开始'),
         _ActionGrid(
@@ -448,6 +451,183 @@ class _StartPanel extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 首页「按模块刷题」：6 个模块一屏可见，点一下就开一组默认 20 题。
+///
+/// 为什么不做成第 7 张卡片：2 列网格塞 7 张会空出半行；更要紧的是
+/// 「补弱项」得把正确率摆出来——弱项排第一并标红，用户一眼看到该练哪个。
+/// 从没练过的模块不参与「最弱」评选（没数据 ≠ 差），排在有数据的后面。
+class _ModulePracticeSection extends ConsumerStatefulWidget {
+  const _ModulePracticeSection();
+
+  @override
+  ConsumerState<_ModulePracticeSection> createState() =>
+      _ModulePracticeSectionState();
+}
+
+class _ModulePracticeSectionState
+    extends ConsumerState<_ModulePracticeSection> {
+  late final Future<Map<String, int>> _countsFuture =
+      Future.value(ref.read(contentRepositoryProvider).moduleCounts());
+
+  @override
+  Widget build(BuildContext context) {
+    final moduleState = ref.watch(moduleStatsProvider);
+    final modules = switch (moduleState) {
+      AsyncData(:final value) => value,
+      _ => const <ModuleStat>[],
+    };
+    final stats = <String, ModuleStat>{
+      for (final item in modules) item.module: item,
+    };
+
+    return FutureBuilder<Map<String, int>>(
+      future: _countsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          // 题库文件损坏时不把整页拖垮，只把这一节降级成一行提示。
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SectionHeading(title: '按模块刷题'),
+              Text(
+                '模块信息读取失败，请稍后重试',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          );
+        }
+        final counts = snapshot.data ?? const <String, int>{};
+        if (counts.isEmpty) return const SizedBox.shrink();
+        final names = counts.keys.toList()
+          ..sort((a, b) => compareModulesForPractice(a, b, stats, counts));
+        // 只有样本够的模块才能叫「最弱」，否则第一次打开就会指着一个
+        // 从没练过的模块说“你最弱”。
+        String? weakest;
+        for (final name in names) {
+          final stat = stats[name];
+          if (stat != null && isModuleSampleEnough(stat)) {
+            weakest = name;
+            break;
+          }
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeading(
+              title: '按模块刷题',
+              action: TextButton(
+                onPressed: () => context.go('/stats'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                child: const Text('查看统计'),
+              ),
+            ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final name in names)
+                  _ModuleChip(
+                    module: name,
+                    questionCount: counts[name] ?? 0,
+                    stat: stats[name],
+                    isWeakest: name == weakest,
+                    onTap: () =>
+                        launchModulePractice(context, ref, module: name),
+                  ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// 单个模块卡：模块名 + 题量 + 我的正确率。
+class _ModuleChip extends StatelessWidget {
+  const _ModuleChip({
+    required this.module,
+    required this.questionCount,
+    required this.stat,
+    required this.isWeakest,
+    required this.onTap,
+  });
+
+  final String module;
+  final int questionCount;
+  final ModuleStat? stat;
+  final bool isWeakest;
+  final VoidCallback onTap;
+
+  String get _subtitle {
+    final base = '$questionCount 题';
+    final current = stat;
+    if (current == null || current.answeredCount <= 0) return '$base · 未练';
+    if (!isModuleSampleEnough(current)) {
+      // 样本太少不给正确率：3 题错 1 题算出来的 66% 会误导人。
+      return '$base · 已做 ${current.answeredCount} 题';
+    }
+    final rate = (moduleAccuracy(current)! * 100).round();
+    return '$base · 正确率 $rate%';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = isWeakest ? AppColors.negative : AppColors.line;
+    return Material(
+      color: isWeakest ? AppColors.negativeFill : AppColors.surface,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: accent),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    module,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (isWeakest) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      '最弱',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.negative,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 3),
+              Text(
+                _subtitle,
+                style: TextStyle(fontSize: 11, color: AppColors.muted),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

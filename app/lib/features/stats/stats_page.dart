@@ -8,41 +8,10 @@ import '../../core/router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/database/app_database.dart';
 import '../../domain/models.dart';
+import '../../domain/module_stats.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../practice/practice_launcher.dart';
 import '../share/share_card_service.dart';
-
-/// 一组练习的默认题量（requirements-discovery Q18：默认 20 题）。
-const int kDefaultPracticeCount = 20;
-
-/// 「模块弱项」的最小样本量（开发文档 §11.1）：已作答不足 10 道的模块只标“数据较少”，
-/// 不参与弱项评选，避免“3 题错 1 题”被当成薄弱模块。
-const int kWeakModuleMinAnswered = 10;
-
-/// 选出最需要补强的模块（开发文档 §11.1）。
-///
-/// 已作答不足 [kWeakModuleMinAnswered] 道的模块不参与评选，
-/// 避免“3 题错 1 题”被说成薄弱模块；没有合格模块时返回 null。
-///
-/// 排序先比正确率，正确率相同时比作答量：
-/// 早先只比正确率，两个模块都是 100% 时会返回排序靠前的那个，
-/// 于是“答了 200 道全对”和“答了 10 道全对”被同等对待，
-/// 甚至刚做满 10 道的模块会被判成“当前最需要补强”。
-ModuleStat? weakestModule(List<ModuleStat> modules) {
-  final eligible =
-      modules
-          .where((item) => item.answeredCount >= kWeakModuleMinAnswered)
-          .toList()
-        ..sort((a, b) {
-          final aRate = a.correctCount / a.answeredCount;
-          final bRate = b.correctCount / b.answeredCount;
-          final byRate = aRate.compareTo(bRate);
-          if (byRate != 0) return byRate;
-          // 正确率相同：作答越多说明样本越可靠，优先当作弱项。
-          return b.answeredCount.compareTo(a.answeredCount);
-        });
-  return eligible.isEmpty ? null : eligible.first;
-}
 
 /// 错题本状态卡：复习中/今日到期/已掌握，到期时点击直达错题页。
 /// 最近练习列表：交卷/结束后仍然可以回看每一次的成绩。
@@ -443,26 +412,9 @@ class StatsPage extends ConsumerWidget {
     WidgetRef ref,
     String module,
   ) async {
-    // 弱项入口与首页一致：一组默认 20 题（requirements-discovery Q18/Q19）。
-    final List<QuestionContent> questions;
-    try {
-      questions = await ref
-          .read(contentRepositoryProvider)
-          .randomQuestions(kDefaultPracticeCount, module: module);
-    } on Object catch (error) {
-      // 题库读取失败时以前什么都不做，用户点「练这个模块」没反应。
-      if (context.mounted) showContentError(context, error);
-      return;
-    }
-    if (!context.mounted) return;
-    await launchPractice(
-      context,
-      ref,
-      mode: PracticeMode.custom,
-      title: '$module · 定向练习',
-      questions: questions,
-      requestedCount: kDefaultPracticeCount,
-    );
+    // 与首页模块区块共用同一个入口：两边口径必须一致（优先未做过的题），
+    // 否则同一模块在统计页和首页刷出来的体验不一样。
+    await launchModulePractice(context, ref, module: module);
   }
 }
 
