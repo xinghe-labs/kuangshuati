@@ -27,7 +27,7 @@
 - **自动**：向 `main` 推送改动，只要碰到 `app/ios/**`、`app/lib/**`、`app/pubspec.yaml`、`.github/workflows/ios-build.yml` 之一就会触发；
 - **手动**：GitHub → Actions → 「iOS Build Check」→ Run workflow。
 
-等它跑完（约 15–30 分钟）后拿包，优先用 **Release 附件**（匿名可下，不需要 GitHub 账号）：打开 [Releases](https://github.com/xinghe-labs/kuangshuati/releases)，找标签为 `ios-<版本>` 的那一条（例如 `ios-1.1.2+12`），下载里面的 `kuangshuati-1.1.2+12-unsigned.ipa`。备选：run 页面底部的 **Artifacts** → `ios-unsigned-ipa-<版本>`（这条需要登录 GitHub，所以只当备用）。
+等它跑完（约 15–30 分钟）后拿包，ipa 和 APK 在**同一个版本 Release** 里（匿名可下，不需要 GitHub 账号）：打开 [Releases](https://github.com/xinghe-labs/kuangshuati/releases)，点 `v1.1.2`，下载 `kuangshuati-1.1.2-12-unsigned.ipa`。备选：run 页面底部的 **Artifacts** → `ios-unsigned-ipa-1.1.2-12`（这条需要登录 GitHub，只当备用）。
 
 **这个 ipa 不能直接拖进手机**，iOS 会拒绝安装未签名的 App。
 

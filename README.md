@@ -38,7 +38,7 @@
 
 ### iOS（未签名 ipa，需自行签名）
 
-没有 Mac 也能拿到 iOS 包：[`ios-build.yml`](.github/workflows/ios-build.yml) 每次改动后在 macOS runner 上编译，并把**未签名 ipa** 挂到 [Releases](https://github.com/xinghe-labs/kuangshuati/releases) 的 `ios-<版本>` 标签下（例如 `ios-1.1.2+12`，文件名 `kuangshuati-1.1.2+12-unsigned.ipa`，匿名可下）。
+没有 Mac 也能拿到 iOS 包：[`ios-build.yml`](.github/workflows/ios-build.yml) 每次改动后在 macOS runner 上编译，并把**未签名 ipa** 传进对应版本的 Release —— 和 APK 同一个 Release（例如 `v1.1.2` 里的 `kuangshuati-1.1.2-12-unsigned.ipa`，匿名可下）；发版建 Release 时也会自动补一次。
 
 iOS 只运行签名过的 App，所以这个 ipa **不能直接安装**：需要用 [Sideloadly](https://sideloadly.io/) 等工具，以自己的 Apple ID 重签后侧载。免费 Apple ID 签名的有效期是 7 天，到期重签一次即可（App 内数据保留）。完整步骤、注意事项与常见问题见 [docs/ios-sideload.md](docs/ios-sideload.md)。
 

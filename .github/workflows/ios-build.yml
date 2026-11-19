@@ -1,15 +1,18 @@
 name: iOS Build Check
 
-# 在真实 Xcode 工具链上编译 iOS，并额外产出一个「未签名 ipa」artifact。
+# 在真实 Xcode 工具链上编译 iOS，并额外产出一个「未签名 ipa」。
 # 两个目的：
 # 1. 让 Swift 代码（尤其 ios/Runner/KuangshuatiChannels.swift）过一遍编译，
 #    避免长期处于「从未编译」状态；
 # 2. 给「没有 Mac、只自己 iPhone 用」的场景提供可侧载的包 —— 未签名 ipa
-#    不能直接安装，需要用 Sideloadly / AltStore 以 Apple ID 重签后安装
+#    不能直接安装，需要用 Sideloadly 以 Apple ID 重签后安装
 #    （免费证书 7 天有效，到期重签即可，App 内数据不受影响）。
 # 这里不产出可上架的签名包：那需要 Apple Developer 证书与 provisioning profile。
 on:
   workflow_dispatch:
+  # 发版时创建 Release（带 APK）会触发一次，把 ipa 补进同一个 Release。
+  release:
+    types: [published]
   push:
     paths:
       - "app/ios/**"
@@ -24,7 +27,7 @@ jobs:
   build:
     runs-on: macos-latest
     timeout-minutes: 45
-    # 默认权限是只读；发布 ipa 到 Release 需要写权限，只给这个 job。
+    # 顶层只读；把 ipa 传到 Release 需要写权限，只给这个 job。
     permissions:
       contents: write
     steps:
@@ -48,7 +51,7 @@ jobs:
         run: flutter pub get
 
       # 版本号的唯一来源是 app/pubspec.yaml 的 `version: 1.1.2+12`，
-      # 与 Android 产物（kuangshuati-1.1.2+12.apk）命名保持一致。
+      # 与 Android 产物（kuangshuati-1.1.2-12.apk）命名保持一致。
       - name: Resolve app version
         id: version
         working-directory: app
@@ -88,12 +91,6 @@ jobs:
           # 否则 pbxproj 注册漏了也能「构建成功」。
           binary="$app_path/Runner"
           test -f "$binary"
-          if ! nm -gU "$binary" 2>/dev/null | grep -q "KuangshuatiChannels"; then
-            if ! strings "$binary" | grep -q "KuangshuatiChannels"; then
-              echo "警告：二进制里没找到 KuangshuatiChannels 符号"
-              strings "$binary" | grep -c "com.kuangshuati.app/backup" || true
-            fi
-          fi
           # MethodChannel 名字是字符串常量，一定在二进制里。
           strings "$binary" | grep -q "com.kuangshuati.app/backup" || {
             echo "错误：二进制中缺少 backup 通道名，Swift 代码未生效"
@@ -106,11 +103,11 @@ jobs:
       - name: Package unsigned ipa
         working-directory: app
         env:
-          VERSION_TAG: ${{ steps.version.outputs.version_name }}+${{ steps.version.outputs.build_number }}
+          FILE_TAG: ${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.build_number }}
         run: |
           set -euo pipefail
           cd build/ios/iphoneos
-          ipa="kuangshuati-${VERSION_TAG}-unsigned.ipa"
+          ipa="kuangshuati-${FILE_TAG}-unsigned.ipa"
           mkdir -p Payload
           cp -R Runner.app Payload/
           # 侧载工具按 ipa 结构识别，必须是 Payload/Runner.app 这一层。
@@ -125,38 +122,35 @@ jobs:
       - name: Upload unsigned ipa
         uses: actions/upload-artifact@v4
         with:
-          name: ios-unsigned-ipa-${{ steps.version.outputs.version_name }}+${{ steps.version.outputs.build_number }}
+          name: ios-unsigned-ipa-${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.build_number }}
           path: app/build/ios/iphoneos/kuangshuati-*-unsigned.ipa
           if-no-files-found: error
           # 包内不含题库（题库首次启动时下载），体积小，留 30 天够重装几轮。
           retention-days: 30
 
-      # artifact 的下载需要登录 GitHub（公开仓库也一样），而 Release 附件是匿名可下的。
-      # 想让普通 iOS 用户直接拿到包，必须再挂到 Release 上。
+      # ipa 和 APK 放同一个版本 Release：用户在一处就能拿到两端安装包。
+      # 版本 Release 由发版流程创建（带 APK），CI 只往里补 ipa，不自己建 ——
+      # 否则发版时网页上会撞「该 tag 的 release 已存在」。
       - name: Publish ipa to release
-        if: github.ref == 'refs/heads/main'
+        if: github.event_name == 'release' || github.ref == 'refs/heads/main'
         working-directory: app
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION_TAG: ${{ steps.version.outputs.version_name }}+${{ steps.version.outputs.build_number }}
-          IPA_PATH: build/ios/iphoneos/kuangshuati-${{ steps.version.outputs.version_name }}+${{ steps.version.outputs.build_number }}-unsigned.ipa
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          IPA_PATH: build/ios/iphoneos/kuangshuati-${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.build_number }}-unsigned.ipa
         run: |
           set -euo pipefail
-          tag="ios-${VERSION_TAG}"
-          title="iOS 未签名 ipa ${VERSION_TAG}"
-          notes=$(cat <<'NOTE'
-          未签名 iOS 安装包。iOS 只运行签名过的 App，需用 Sideloadly 等工具以你自己的
-          Apple ID 重签后侧载；免费 Apple ID 签名 7 天有效，到期重签即可，App 数据保留。
-          步骤见仓库 docs/ios-sideload.md。包内不含题库（首次启动时下载，约 145 MB）。
-          NOTE
-          )
-          # 同一版本重跑时覆盖同名附件，不堆重复文件。
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "$IPA_PATH" --clobber
-          else
-            gh release create "$tag" "$IPA_PATH" --title "$title" --notes "$notes"
+          # release 事件用它的 tag；push 事件按版本号推 v<版本>。
+          tag="${RELEASE_TAG:-v${VERSION_NAME}}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            echo "::warning::Release $tag 还不存在，跳过上传 ipa（等发版建好 Release 后，本 workflow 会自动补上）"
+            exit 0
           fi
-          gh release view "$tag" --json assets --jq '.assets[].name'
+          # 同名附件覆盖，重跑不堆重复文件。
+          gh release upload "$tag" "$IPA_PATH" --clobber
+          echo "已上传到 Release $tag："
+          gh release view "$tag" --json assets --jq '.assets[] | "\(.name)  \(.size) B"'
 
       - name: Upload build log on failure
         if: failure()
