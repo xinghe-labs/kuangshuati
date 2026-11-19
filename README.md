@@ -5,7 +5,7 @@
 [![CI](https://github.com/xinghe-labs/kuangshuati/actions/workflows/ci.yml/badge.svg)](https://github.com/xinghe-labs/kuangshuati/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![Flutter](https://img.shields.io/badge/Flutter-3.44.1-02569B)
-![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Web-3DDC84)
+![Platform](https://img.shields.io/badge/platform-Android-3DDC84)
 
 <table>
   <tr>
@@ -40,7 +40,7 @@ iOS 只运行签名过的 App，所以这个 ipa **不能直接安装**：需要
 - **六种练习入口**：顺序、随机、试卷、错题复习、自定义组卷、整卷模考（含按题库模块占比随机组卷的「随机模考」）；逐题解析或交卷后统一出解析。
 - **自定义题库**：导入自己整理的 JSON 题库（支持图片、多选、主观自评题），与官方题库并存，练习记录互不干扰；格式见 [docs/question-bank-format.md](docs/question-bank-format.md)；App 内「设置 → 导入题库 → 查看格式与示例」也有一份可复制的最小示例。
 - **完整闭环**：作答 → 判题 → 解析 → 结果 → 错题入册 → 到期复习；中断后能接着上次的进度继续。
-- **统计与备份**：作答统计、最近练习正确率、跨端 `.gkbackup` 备份与恢复（原生端与 Web 端互导已实测）。
+- **统计与备份**：作答统计、最近练习正确率、`.gkbackup` 备份与恢复。
 - **体验细节**：资料分析题图内联排版、深色模式跟随系统、键盘作答与快捷键、模考倒计时自动交卷。
 
 ## 隐私承诺
@@ -52,8 +52,7 @@ iOS 只运行签名过的 App，所以这个 ipa **不能直接安装**：需要
 
 ## Roadmap
 
-- [x] Android 正式发布（v1.1.2）
-- [x] Web 构建支持，在线试用版已部署到 GitHub Pages
+- [x] Android 正式发布（v1.1.3）
 - [x] iOS 未签名 ipa：CI 构建，自备 Apple ID 自行签名侧载（见 [docs/ios-sideload.md](docs/ios-sideload.md)）
 - [ ] iOS 正式分发（TestFlight / App Store）：代码同构，CI 已做编译验证；缺 Apple Developer 证书，上架时间待定
 - [ ] 题库内容更新：应用内已支持版本检查，公开的更新节奏待定
@@ -112,7 +111,7 @@ docs/                 # 内容清单示例、自定义题库格式文档与示�
 
 ## English
 
-**Kuangshuati** ("Crazy Drills") is an offline-first Flutter app for practicing the aptitude section (行测 / xingce) of China's civil-service exam. No account, no sign-in, no analytics — your answers never leave your device. The full question bank (one-time in-app download, ~145 MB, SHA-256 verified) lives in local SQLite, and everything works fully offline afterwards: six practice modes, error review, mock exams with countdown auto-submit, cross-device backup via `.gkbackup` files. Source is open under Apache-2.0 — grab the Android APK from [Releases](https://github.com/xinghe-labs/kuangshuati/releases); a Web build is supported, and iOS compiles in CI with an unsigned ipa artifact that you can self-sign with your own Apple ID (see [docs/ios-sideload.md](docs/ios-sideload.md); a signed release is still pending).
+**Kuangshuati** ("Crazy Drills") is an offline-first Flutter app for practicing the aptitude section (行测 / xingce) of China's civil-service exam. No account, no sign-in, no analytics — your answers never leave your device. The full question bank (one-time in-app download, ~145 MB, SHA-256 verified) lives in local SQLite, and everything works fully offline afterwards: six practice modes, error review, mock exams with countdown auto-submit, cross-device backup via `.gkbackup` files. Source is open under Apache-2.0 — grab the Android APK from [Releases](https://github.com/xinghe-labs/kuangshuati/releases), and iOS compiles in CI with an unsigned ipa artifact that you can self-sign with your own Apple ID (see [docs/ios-sideload.md](docs/ios-sideload.md); a signed release is still pending).
 
 ---
 
