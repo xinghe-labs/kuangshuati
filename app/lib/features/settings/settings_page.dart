@@ -52,7 +52,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
     if (picked == null || !mounted) return;
     await db.setSetting(
-        'reminderMinutesOfDay', (picked.hour * 60 + picked.minute).toString());
+      'reminderMinutesOfDay',
+      (picked.hour * 60 + picked.minute).toString(),
+    );
     await db.setSetting('reminderEnabled', 'true');
     await syncReminderFromSettings(db);
     if (!mounted) return;
@@ -138,8 +140,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: '每日练习提醒',
               subtitle: reminderSupported
                   ? (reminderOn
-                      ? '每天 ${formatReminderTime(reminderMinutes)} 提醒你来刷题'
-                      : '每天固定时间提醒你来刷题')
+                        ? '每天 ${formatReminderTime(reminderMinutes)} 提醒你来刷题'
+                        : '每天固定时间提醒你来刷题')
                   : '当前环境不支持本地提醒',
               trailing: Switch(
                 value: reminderOn,
@@ -282,8 +284,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   /// 导入格式说明：要点 + 可复制的最小示例（内容见 bank_format_help.dart）。
-  Future<void> _showBankFormatHelp() =>
-      showDialog<void>(context: context, builder: (_) => const BankFormatHelpDialog());
+  Future<void> _showBankFormatHelp() => showDialog<void>(
+    context: context,
+    builder: (_) => const BankFormatHelpDialog(),
+  );
 
   Future<void> _importQuestionBank() async {
     final manager = ref.read(contentManagerProvider);

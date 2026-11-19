@@ -65,7 +65,8 @@ class SessionAnswers extends Table {
   /// 注意它必须保持单调（一旦 true 不再回 false）：saveAnswer 用
   /// insertOnConflictUpdate 整行覆盖，未提交的保存不能把它洗回 false，
   /// 否则交卷时会重复累加。
-  BoolColumn get moduleCounted => boolean().withDefault(const Constant(false))();
+  BoolColumn get moduleCounted =>
+      boolean().withDefault(const Constant(false))();
 
   /// 这道题是否已经计入过「当日统计」（已答 / 正确 / 用时 / 连续天数）。
   ///
@@ -288,10 +289,11 @@ class AppDatabase extends _$AppDatabase {
   /// 顺序练习用它跳过已经做过的题：早先固定从题库最前面取 100 题，
   /// 练完一遍后再点“顺序练习”还是那 100 题。
   Future<List<String>> answeredQuestionIds() async {
-    final rows = await (selectOnly(sessionAnswers, distinct: true)
-          ..addColumns([sessionAnswers.questionId])
-          ..where(sessionAnswers.submitted.equals(true)))
-        .get();
+    final rows =
+        await (selectOnly(sessionAnswers, distinct: true)
+              ..addColumns([sessionAnswers.questionId])
+              ..where(sessionAnswers.submitted.equals(true)))
+            .get();
     return [for (final row in rows) ?row.read(sessionAnswers.questionId)];
   }
 
@@ -311,14 +313,13 @@ class AppDatabase extends _$AppDatabase {
   /// 模考答了 3 题退出，首页仍然写“这一组还没有提交答案”。
   /// 所以改成“选过选项就算已答”，与练习页/答题卡的口径一致。
   Stream<int> watchSubmittedCount(String sessionId) {
-    return (select(sessionAnswers)
-          ..where((row) => row.sessionId.equals(sessionId)))
-        .watch()
-        .map(
-          (rows) => rows
-              .where((row) => _decodeSelected(row.selectedJson).isNotEmpty)
-              .length,
-        );
+    return (select(
+      sessionAnswers,
+    )..where((row) => row.sessionId.equals(sessionId))).watch().map(
+      (rows) => rows
+          .where((row) => _decodeSelected(row.selectedJson).isNotEmpty)
+          .length,
+    );
   }
 
   /// 一次性读取已作答题数（弹「结束旧练习？」确认时用）。
@@ -371,7 +372,9 @@ class AppDatabase extends _$AppDatabase {
   Future<SessionSummary> summarizeSession(String sessionId) async {
     final rows = await sessionQuestionRows(sessionId);
     final answers = await answersForSession(sessionId);
-    final byQuestion = {for (final answer in answers) answer.questionId: answer};
+    final byQuestion = {
+      for (final answer in answers) answer.questionId: answer,
+    };
     var answered = 0;
     var correct = 0;
     var graded = 0;
@@ -719,7 +722,9 @@ class AppDatabase extends _$AppDatabase {
       // 用户做了几十题但没交卷（直接退出、或点了别的练习把旧会话挤掉），
       // 统计页的「各模块正确率」「最该补的模块」会一直是空的，
       // 而「今日已答」却有数字，看起来像数据对不上。
-      if (module != null && module.isNotEmpty && (shouldCount || countedBefore)) {
+      if (module != null &&
+          module.isNotEmpty &&
+          (shouldCount || countedBefore)) {
         await _accumulateModuleStats(
           module: module,
           answered: shouldCount ? 1 : 0,
@@ -741,7 +746,8 @@ class AppDatabase extends _$AppDatabase {
     // 明确判错的结论”：翻题/标不确定/退出前保存的 isCorrect 是 null，
     // 不会把白卷或未判分的题写进错题本。
     // 已交卷的会话由 finalizeSession 统一处理，这里跳过以免重复计数。
-    final firstWrongResult = isCorrect == false &&
+    final firstWrongResult =
+        isCorrect == false &&
         existing?.isCorrect != false &&
         selected.isNotEmpty &&
         session != null &&
