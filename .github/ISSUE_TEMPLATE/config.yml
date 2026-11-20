@@ -1,0 +1,12 @@
+---
+# GitHub 的 contact_links 要求完整 URL，行宽必然超过 default 规则的 80。
+blank_issues_enabled: true
+contact_links:
+  - name: iOS 自签安装步骤
+    # yamllint disable-line rule:line-length
+    url: https://github.com/xinghe-labs/kuangshuati/blob/main/docs/ios-sideload.md
+    about: 未签名 ipa 怎么用自己的 Apple ID 侧载、7 天过期怎么重签
+  - name: 自定义题库格式
+    # yamllint disable-line rule:line-length
+    url: https://github.com/xinghe-labs/kuangshuati/blob/main/docs/question-bank-format.md
+    about: 想导入自己整理的题库，先看字段说明与可复制示例

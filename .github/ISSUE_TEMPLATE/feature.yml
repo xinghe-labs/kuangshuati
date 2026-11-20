@@ -1,0 +1,64 @@
+---
+name: 功能请求
+description: 希望增加或改变某个行为，或觉得某处交互别扭
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        功能请求不一定会实现，但每一条都会被看到。
+
+        如果你只是想说「某处用着不顺手」，也可以直接填这一张，
+        **不必**先想清楚该怎么做。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你遇到的是什么场景
+      description: |
+        先描述场景，不要直接给方案。「做题做到一半被打断，
+        回来找不到刚才那组」比「加个自动保存按钮」有用得多。
+      placeholder: |
+        例如：通勤路上做真题，地铁进隧道断网，App 会卡在加载页面，
+        得杀掉重开才能继续。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你希望它怎么工作
+      description: 可选。有想法就写，没有也完全可以留空。
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 现在你用什么办法绕过
+      description: 可选。能绕过说明痛感不强，绕不过去反而说明它是刚需。
+    validations:
+      required: false
+  - type: dropdown
+    id: scope
+    attributes:
+      label: 这属于哪一类
+      options:
+        - 练习流程（作答、判题、交卷）
+        - 错题与统计
+        - 题库内容与更新
+        - 界面与可用性
+        - 安装、更新与备份
+        - 其他
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: 请确认这几条约束
+      description: |
+        本项目的两条硬边界：不引入账号/云同步/埋点 SDK；
+        不随仓库或 Release 分发第三方题库内容。
+      options:
+        - label: 这个请求不需要账号、云同步或第三方统计 SDK
+          required: false
+        - label: 这个请求不依赖分发新的题库内容
+          required: false

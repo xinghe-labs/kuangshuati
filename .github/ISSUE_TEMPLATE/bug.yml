@@ -1,0 +1,84 @@
+---
+name: Bug 报告
+description: 崩溃、显示错乱、数据异常等功能问题
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。填得越具体，定位越快。
+
+        如果是**安全问题**，请不要在这里公开讨论：仓库根目录的
+        `SECURITY.md` 写了私密报告渠道。
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么
+      description: 一句话说清现象，有报错文字的话原样贴上来。
+      placeholder: 例如：做完一组练习点「交卷」后白屏，返回键也无效。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 从打开 App 开始，标出哪一步不对。必现还是偶发也写一下。
+      placeholder: |
+        1. 首页点「随机练习」
+        2. 做完 20 题
+        3. 点「交卷」→ 白屏
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: App 版本
+      description: 「设置 → 关于」里可见，形如 1.1.3+13。
+      placeholder: 1.1.3+13
+    validations:
+      required: true
+  - type: dropdown
+    id: install-source
+    attributes:
+      label: 安装方式
+      description: 应用内更新和覆盖安装走的是不同路径，这一项经常是关键。
+      options:
+        - GitHub Releases 下载的 APK
+        - 应用内提示更新后升级的
+        - 自己编译的
+        - iOS 自签侧载
+    validations:
+      required: true
+  - type: dropdown
+    id: content
+    attributes:
+      label: 题库来源
+      options:
+        - 官方题库包（首次启动下载的）
+        - 自己导入的 JSON 题库
+        - 还没下题库，只有演示数据
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: 系统版本
+      placeholder: Android 12 / iOS 17.5
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: 机型
+      description: 可选，但涉及布局、字号、小组件的问题很需要它。
+      placeholder: 真机 5G
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: 截图、日志、改过的设置项，或「换个页面就正常」这类线索。
+    validations:
+      required: false
